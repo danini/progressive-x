@@ -206,6 +206,8 @@ void testMultiHomographyFitting(
 		UniformSampler,
 		UniformSampler> progressive_x;
 
+	progressive_x.settings.minimum_number_of_inliers = 8;
+
 	progressive_x.run(points,
 		neighborhood,
 		main_sampler,

@@ -27,7 +27,9 @@ struct MultiModelSettings
 		do_graph_cut, // Flag to decide of graph-cut is used in the local optimization
 		use_inlier_limit; // Flag to decide if an inlier limit is used in the local optimization to speed up the procedure
 	
-	size_t cell_number_in_neighborhood_graph,
+	size_t minimum_number_of_inliers,
+		max_proposal_number_without_change,
+		cell_number_in_neighborhood_graph,
 		max_local_optimization_number, // Maximum number of local optimizations
 		min_iteration_number_before_lo, // Minimum number of RANSAC iterations before applying local optimization
 		min_ransac_iteration_number, // Minimum number of RANSAC iterations
@@ -43,12 +45,14 @@ struct MultiModelSettings
 		spatial_coherence_weight; // The weight of the spatial coherence term
 
 	MultiModelSettings() :
+		minimum_number_of_inliers(0),
 		do_final_iterated_least_squares(true),
 		do_local_optimization(true),
 		do_graph_cut(true),
 		use_inlier_limit(false),
 		cell_number_in_neighborhood_graph(8),
 		max_local_optimization_number(20),
+		max_proposal_number_without_change(10),
 		max_graph_cut_number(std::numeric_limits<size_t>::max()),
 		max_least_squares_iterations(20),
 		min_iteration_number_before_lo(20),
@@ -85,6 +89,7 @@ protected:
 	std::vector<double> compound_preference_vector;
 	double compound_preference_vector_sum,
 		compound_preference_vector_length;
+	size_t number_of_iterations_without_change;
 
 	void initialize(const cv::Mat &data_);
 
@@ -121,6 +126,8 @@ void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptim
 	// Initializing the procedure
 	initialize(data_);
 
+	size_t proposals_without_change = 0;
+
 	for (size_t current_iteration = 0; current_iteration < 100; ++current_iteration)
 	{
 		Model model;
@@ -141,6 +148,17 @@ void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptim
 			&neighborhood_graph_,
 			model);
 		
+		const size_t inlier_number = proposal_engine->getRansacStatistics().inliers.size();
+
+		if (inlier_number < minimum_number_of_inliers)
+		{
+			number_of_iterations_without_change += iteration_number;
+			++proposals_without_change;
+			if (proposals_without_change == settings.max_proposal_number_without_change)
+				break;
+			continue;
+		}
+
 		statistics.inliers_of_each_model.emplace_back(proposal_engine->getRansacStatistics().inliers);
 		break;
 
@@ -154,6 +172,7 @@ template<class _NeighborhoodGraph,
 void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::initialize(const cv::Mat &data_)
 {
 	// 
+	number_of_iterations_without_change = 0;
 
 	// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 	proposal_engine = std::make_unique<GCRANSAC<_ModelEstimator, _NeighborhoodGraph>>();
