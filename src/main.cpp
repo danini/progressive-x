@@ -41,6 +41,17 @@ bool initializeScene(const std::string &scene_name_,
 	std::string &output_correspondence_path_,
 	std::string &output_matched_image_path_);
 
+void drawMatches(
+	const cv::Mat &points_,
+	const std::vector<size_t> &inliers_,
+	const cv::Mat &image_src_,
+	const cv::Mat &image_dst_,
+	cv::Mat &out_image_,
+	int circle_radius_,
+	const cv::Scalar &color_);
+
+using namespace gcransac;
+
 int main(int argc, const char* argv[])
 {
 	std::string scene = "johnssona";
@@ -179,7 +190,7 @@ void testMultiHomographyFitting(
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
 	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
 	start = std::chrono::system_clock::now(); // The starting time of the neighborhood calculation
-	GridNeighborhoodGraph neighborhood(&points,
+	neighborhood::GridNeighborhoodGraph neighborhood(&points,
 		source_image.cols / static_cast<double>(cell_number_in_neighborhood_graph_),
 		source_image.rows / static_cast<double>(cell_number_in_neighborhood_graph_),
 		destination_image.cols / static_cast<double>(cell_number_in_neighborhood_graph_),
@@ -197,14 +208,14 @@ void testMultiHomographyFitting(
 	}
 	
 	// Initializing the samplers
-	UniformSampler main_sampler(&points); // The main sampler is used inside the local optimization
-	UniformSampler local_optimization_sampler(&points); // The local optimization sampler is used inside the local optimization
+	sampler::UniformSampler main_sampler(&points); // The main sampler is used inside the local optimization
+	sampler::UniformSampler local_optimization_sampler(&points); // The local optimization sampler is used inside the local optimization
 	
 	// Applying Progressive-X
-	ProgressiveX<GridNeighborhoodGraph,
+	progx::ProgressiveX<neighborhood::GridNeighborhoodGraph,
 		DefaultHomographyEstimator,
-		UniformSampler,
-		UniformSampler> progressive_x;
+		sampler::UniformSampler,
+		sampler::UniformSampler> progressive_x;
 
 	progressive_x.settings.minimum_number_of_inliers = 8;
 
@@ -213,21 +224,39 @@ void testMultiHomographyFitting(
 		main_sampler,
 		local_optimization_sampler);
 
-	// Draw the inlier matches to the images
-	RANSACStatistics statistics;
-	statistics.inliers = progressive_x.getStatistics().inliers_of_each_model.back();
-	
 	cv::Mat match_image;
-	drawMatches(points,
-		statistics.inliers,
-		source_image,
-		destination_image,
-		match_image);
+	match_image.create(source_image.rows, // Height
+		2 * source_image.cols, // Width
+		source_image.type()); // Type
+	
+	cv::Mat roi_img_result_left =
+		match_image(cv::Rect(0, 0, source_image.cols, source_image.rows)); // Img1 will be on the left part
+	cv::Mat roi_img_result_right =
+		match_image(cv::Rect(destination_image.cols, 0, destination_image.cols, destination_image.rows)); // Img2 will be on the right part, we shift the roi of img1.cols on the right
 
-	printf("Saving the matched images to file '%s'.\n", output_match_image_path_.c_str());
-	imwrite(output_match_image_path_, match_image); // Save the matched image to file
-	printf("Saving the inlier correspondences to file '%s'.\n", out_correspondence_path_.c_str());
-	savePointsToFile(points, out_correspondence_path_.c_str(), &statistics.inliers); // Save the inliers to file
+	cv::Mat roi_image_src = source_image(cv::Rect(0, 0, source_image.cols, source_image.rows));
+	cv::Mat roi_image_dst = destination_image(cv::Rect(0, 0, destination_image.cols, destination_image.rows));
+
+	roi_image_src.copyTo(roi_img_result_left); //Img1 will be on the left of imgResult
+	roi_image_dst.copyTo(roi_img_result_right); //Img2 will be on the right of imgResult
+
+	for (const auto &inliers : progressive_x.getStatistics().inliers_of_each_model)
+	{
+		printf("Number of inliers = %d\n", inliers.size());
+
+		cv::Scalar color(255 * static_cast<double>(rand()) / RAND_MAX,
+			255 * static_cast<double>(rand()) / RAND_MAX,
+			255 * static_cast<double>(rand()) / RAND_MAX);
+
+		// Draw the inlier matches to the images	
+		drawMatches(points,
+			inliers,
+			source_image,
+			destination_image,
+			match_image,
+			10,
+			color);
+	}
 
 	printf("Press a button to continue...\n");
 
@@ -237,4 +266,26 @@ void testMultiHomographyFitting(
 		1600,
 		1200,
 		true);
+}
+
+void drawMatches(
+	const cv::Mat &points_,
+	const std::vector<size_t> &inliers_,
+	const cv::Mat &image_src_,
+	const cv::Mat &image_dst_,
+	cv::Mat &out_image_,
+	int circle_radius_,
+	const cv::Scalar &color_)
+{
+	for (const auto &idx : inliers_)
+	{
+		cv::Point2d pt1(points_.at<double>(idx, 0),
+			points_.at<double>(idx, 1));
+		cv::Point2d pt2(image_dst_.cols + points_.at<double>(idx, 2),
+			points_.at<double>(idx, 3));
+		
+		cv::circle(out_image_, pt1, circle_radius_, color_, static_cast<int>(circle_radius_ * 0.4));
+		cv::circle(out_image_, pt2, circle_radius_, color_, static_cast<int>(circle_radius_ * 0.4));
+		cv::line(out_image_, pt1, pt2, color_, 2);
+	}
 }

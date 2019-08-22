@@ -60,21 +60,47 @@ file(GLOB_RECURSE SRCS_GraphCutRANSAC
 )
 
 source_group(third_party\\GCOptimization FILES
-	graph-cut-ransac/include/GCoptimization.cpp
-	graph-cut-ransac/include/LinkedBlockList.cpp
-	graph-cut-ransac/include/graph.cpp
-	graph-cut-ransac/include/maxflow.cpp
-	graph-cut-ransac/include/block.h
-	graph-cut-ransac/include/energy.h
-	graph-cut-ransac/include/GCoptimization.h
-	graph-cut-ransac/include/graph.h
-	graph-cut-ransac/include/LinkedBlockList.h
+	include/GCoptimization.cpp
+	include/LinkedBlockList.cpp
+	include/graph.cpp
+	include/maxflow.cpp
+	include/block.h
+	include/energy.h
+	include/GCoptimization.h
+	include/graph.h
+	include/LinkedBlockList.h
 )
 
-source_group(third_party\\Theia FILES
-	graph-cut-ransac/include/prosac_sampler.h
-	graph-cut-ransac/include/sampler.h
-	graph-cut-ransac/include/estimator.h
+source_group(Models FILES
+	include/solver_engine.h
+	include/solver_essential_matrix_five_point_stewenius.h
+	include/solver_fundamental_matrix_eight_point.h
+	include/solver_fundamental_matrix_seven_point.h
+	include/solver_homography_four_point.h
+	include/essential_estimator.h
+	include/estimator.h
+	include/fundamental_estimator.h
+	include/homography_estimator.h
+	include/model.h
+)
+
+source_group(NeighborhoodGraphs FILES
+	include/flann_neighborhood_graph.h
+	include/grid_neighborhood_graph.h
+	include/neighborhood_graph.h
+)
+
+source_group(Samplers FILES
+	include/progressive_napsac_sampler.h
+	include/prosac_sampler.h
+	include/sampler.h
+	include/uniform_sampler.h
+)
+
+source_group(Utilities FILES
+	include/utils.h
+	include/types.h
+	include/uniform_random_generator.h
 )
 
 add_library(GraphCutRANSAC STATIC
