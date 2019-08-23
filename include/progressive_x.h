@@ -5,10 +5,11 @@
 #include <random>
 #include <vector>
 
-#include "PEARL.h"
+#include "pearl.h"
 #include "GCRANSAC.h"
 #include "types.h"
 #include "scoring_function_with_compound_model.h"
+#include "progress_visualizer.h"
 
 #include "uniform_sampler.h"
 #include "prosac_sampler.h"
@@ -79,6 +80,7 @@ namespace progx
 	{
 		double processing_time;
 		std::vector<std::vector<size_t>> inliers_of_each_model;
+		std::vector<size_t> labeling;
 	};
 
 	template<class _NeighborhoodGraph,
@@ -88,20 +90,37 @@ namespace progx
 		class ProgressiveX
 	{
 	protected:
+		// The proposal engine estimating a putative model in the beginning of each iteration
 		std::unique_ptr<gcransac::GCRANSAC<_ModelEstimator,
 			_NeighborhoodGraph,
 			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>> proposal_engine;
+
+		// The model optimizer optimizing the compound model parameters in each iteration
 		std::unique_ptr<pearl::PEARL<_ModelEstimator,
 			_NeighborhoodGraph>> model_optimizer;
+
+		// The model estimator which estimates the model parameters from a set of points
 		_ModelEstimator model_estimator;
+
+		// The statistics of Progressive-X containing everything which the user might be curious about,
+		// e.g., processing time, results, etc.
 		MultiModelStatistics statistics;
-		std::vector<Model<_ModelEstimator>> models;
+
+		// The set of models (i.e., the compound instance) maintained throughout the multi-model fitting. 
+		std::vector<progx::Model<_ModelEstimator>> models;
+
+		// The preference vector of the compound model instance
 		Eigen::MatrixXd compound_preference_vector;
+
 		double compound_preference_vector_sum,
 			compound_preference_vector_length,
-			truncated_squared_threshold;
-		size_t number_of_iterations_without_change,
-			point_number;
+			truncated_squared_threshold; // The truncated squared inlier-outlier threshold
+
+		size_t number_of_iterations_without_change, // The number of consecutive iterations since nothing has happenned
+			point_number; // The number of points
+
+		// The visualizer which demonstrates the procedure by showing the labeling in each intermediate step
+		ProgressVisualizer * const visualizer;
 
 		void initialize(const cv::Mat &data_);
 
@@ -115,7 +134,8 @@ namespace progx
 	public:
 		MultiModelSettings settings;
 
-		ProgressiveX()
+		ProgressiveX(ProgressVisualizer * const visualizer_ = nullptr) :
+			visualizer(visualizer_)
 		{
 		}
 
@@ -123,7 +143,7 @@ namespace progx
 			const _NeighborhoodGraph &neighborhood_graph_, // The initialized neighborhood graph
 			_MainSampler &main_sampler,
 			_LocalOptimizerSampler &local_optimization_sampler);
-
+		
 		const MultiModelStatistics &getStatistics() const
 		{
 			return statistics;
@@ -209,9 +229,20 @@ namespace progx
 			// Add the putative instance to the compound one
 			models.emplace_back(putative_model);
 
+			// Apply the model optimizer
+			model_optimizer->run(data_,
+				&neighborhood_graph_,
+				model_estimator,
+				models);
 
+			//statistics.inliers_of_each_model.emplace_back(proposal_engine->getRansacStatistics().inliers);
 
-			statistics.inliers_of_each_model.emplace_back(proposal_engine->getRansacStatistics().inliers);
+			// Visualize the labeling results if needed
+			if (visualizer != nullptr)
+			{
+				visualizer->setLabelNumber(models.size() + 1);
+				visualizer->visualize(0, "Labeling");
+			}
 
 			// Update the compound model
 			updateCompoundModel(data_);
@@ -225,7 +256,8 @@ namespace progx
 	void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::initialize(const cv::Mat &data_)
 	{
 		// 
-		point_number = data_.rows;
+		point_number = data_.rows; // The number of data points
+		statistics.labeling.resize(point_number, 0); // The labeling which assigns each point to a model instance. Initially, all points are considered outliers.
 		number_of_iterations_without_change = 0;
 		truncated_squared_threshold = std::pow(3.0 / 2.0 * settings.inlier_outlier_threshold, 2);
 		compound_preference_vector = Eigen::MatrixXd::Zero(data_.rows, 1);
@@ -253,6 +285,13 @@ namespace progx
 			proposal_engine->getMutableScoringFunction();
 		scoring.setCompoundModel(&models, 
 			&compound_preference_vector);
+
+		// Initialize the visualizer if needed
+		if (visualizer != nullptr)
+		{
+			visualizer->setLabeling(&statistics.labeling, // Set the labeling pointer 
+				1); // Initially, only the outlier model instance exists
+		}
 	}
 	
 	template<class _NeighborhoodGraph,

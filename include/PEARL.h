@@ -89,11 +89,10 @@ namespace pearl
 
 		}
 
-
 		bool run(const cv::Mat &data_,
-			const std::vector<progx::Model<_ModelEstimator>> &models_,
-			const _ModelEstimator &model_estimator_,
-			const _NeighborhoodGraph &neighborhood_graph_);
+			const _NeighborhoodGraph * neighborhood_graph_,
+			_ModelEstimator &model_estimator_,
+			std::vector<progx::Model<_ModelEstimator>> &models_);
 
 	protected:
 		GCoptimizationGeneralGraph *alpha_expansion_engine;
@@ -110,15 +109,31 @@ namespace pearl
 			const bool changed_,
 			double &energy_);
 
+		const std::pair<std::vector<size_t>, size_t> getLabeling()
+		{
+			if (alpha_expansion_engine == nullptr)
+				return std::make_pair<auto>(std::vector<size_t>(point_number, 0), 1);
+
+			std::vector<size_t> labeling(point_number);
+			size_t max_label = 0;
+			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)
+			{
+				const size_t &label = alpha_expansion_engine->whatLabel(point_idx);
+				labeling[point_idx] = label;
+				max_label = MAX(max_label, label);				
+			}
+
+			return std::make_pair<auto>(labeling, max_label + 1);
+		}
 	};
 
 	template<class _NeighborhoodGraph,
 		class _ModelEstimator>
 		bool PEARL<_NeighborhoodGraph, _ModelEstimator>::run(
 			const cv::Mat &data_,
-			const std::vector<progx::Model<_ModelEstimator>> &models_,
-			const _ModelEstimator &model_estimator_,
-			const _NeighborhoodGraph &neighborhood_graph_)
+			const _NeighborhoodGraph * neighborhood_graph_,
+			_ModelEstimator &model_estimator_,
+			std::vector<progx::Model<_ModelEstimator>> &models_)
 	{
 		point_number = data_.rows; // The number of points
 		size_t iteration_number = 0, // The number of current iterations
@@ -133,11 +148,11 @@ namespace pearl
 			// Apply alpha-expansion to get the labeling which assigns each point to a model instance
 			labeling(data_, // All data points
 				model_estimator_, // The model estimator
-				neighborhood_graph_, // The neighborhood graph
+				*neighborhood_graph_, // The neighborhood graph
 				is_changed, // A flag to see if anything is changed in two consecutive iterations
 				energy); // The energy of the alpha-expansion
 
-
+			break;
 		}
 		return true;
 	}

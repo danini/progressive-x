@@ -14,6 +14,7 @@
 #include "essential_estimator.h"
 
 #include "progressive_x.h"
+#include "progress_visualizer.h"
 
 #include <ctime>
 #include <direct.h>
@@ -211,11 +212,16 @@ void testMultiHomographyFitting(
 	sampler::UniformSampler main_sampler(&points); // The main sampler is used inside the local optimization
 	sampler::UniformSampler local_optimization_sampler(&points); // The local optimization sampler is used inside the local optimization
 	
+	// Initializing a visualizer
+	progx::MultiHomographyVisualizer visualizer(&points,
+		&source_image,
+		&destination_image);
+
 	// Applying Progressive-X
 	progx::ProgressiveX<neighborhood::GridNeighborhoodGraph,
 		DefaultHomographyEstimator,
 		sampler::UniformSampler,
-		sampler::UniformSampler> progressive_x;
+		sampler::UniformSampler> progressive_x(&visualizer);
 
 	progressive_x.settings.minimum_number_of_inliers = 8;
 
