@@ -25,79 +25,97 @@
 
 #include "progx_model.h"
 
+#include <glog/logging.h>
+
 namespace progx
 {
 	struct MultiModelSettings
 	{
-		bool do_final_iterated_least_squares, // Flag to decide a final iterated least-squares fitting is needed to polish the output model parameters.
-			do_local_optimization, // Flag to decide if local optimization is needed
-			do_graph_cut, // Flag to decide of graph-cut is used in the local optimization
-			use_inlier_limit; // Flag to decide if an inlier limit is used in the local optimization to speed up the procedure
+		// The settings of the proposal engine
+		gcransac::Settings proposal_engine_settings;
 
 		size_t minimum_number_of_inliers,
 			max_proposal_number_without_change,
-			cell_number_in_neighborhood_graph,
-			max_local_optimization_number, // Maximum number of local optimizations
-			min_iteration_number_before_lo, // Minimum number of RANSAC iterations before applying local optimization
-			min_ransac_iteration_number, // Minimum number of RANSAC iterations
-			max_ransac_iteration_number, // Maximum number of RANSAC iterations
-			max_unsuccessful_model_generations, // Maximum number of unsuccessful model generations
-			max_least_squares_iterations, // Maximum number of iterated least-squares iterations
-			max_graph_cut_number, // Maximum number of graph-cuts applied in each current_iteration
-			core_number; // Number of parallel threads
+			cell_number_in_neighborhood_graph;
 
-		double confidence, // Required confidence in the result
-			neighborhood_sphere_radius, // The radius of the ball used for creating the neighborhood graph
+		double maximum_tanimoto_similarity,
+			confidence, // Required confidence in the result
+			one_minus_confidence, // 1 - confidence
 			inlier_outlier_threshold, // The inlier-outlier threshold
 			spatial_coherence_weight; // The weight of the spatial coherence term
 
 		MultiModelSettings() :
-			minimum_number_of_inliers(0),
-			do_final_iterated_least_squares(true),
-			do_local_optimization(true),
-			do_graph_cut(true),
-			use_inlier_limit(false),
+			maximum_tanimoto_similarity(0.5),
+			minimum_number_of_inliers(20),
 			cell_number_in_neighborhood_graph(8),
-			max_local_optimization_number(20),
 			max_proposal_number_without_change(10),
-			max_graph_cut_number(std::numeric_limits<size_t>::max()),
-			max_least_squares_iterations(20),
-			min_iteration_number_before_lo(20),
-			min_ransac_iteration_number(200),
-			neighborhood_sphere_radius(20),
-			max_ransac_iteration_number(std::numeric_limits<size_t>::max()),
-			max_unsuccessful_model_generations(100),
-			core_number(1),
 			spatial_coherence_weight(0.14),
 			inlier_outlier_threshold(2.0),
-			confidence(0.95)
+			confidence(0.95),
+			one_minus_confidence(0.05)
 		{
-
+			proposal_engine_settings.neighborhood_sphere_radius = cell_number_in_neighborhood_graph;
+			proposal_engine_settings.max_iteration_number = 5000;
+			proposal_engine_settings.max_local_optimization_number = 50;
+			proposal_engine_settings.threshold = inlier_outlier_threshold;
+			proposal_engine_settings.confidence = confidence;
 		}
+	};
+
+	struct IterationStatistics
+	{
+		double time_of_proposal_engine,
+			time_of_model_validation,
+			time_of_optimization,
+			time_of_compound_model_update;
+		size_t number_of_instances;
 	};
 
 	struct MultiModelStatistics
 	{
-		double processing_time;
+		double processing_time,
+			total_time_of_proposal_engine,
+			total_time_of_model_validation,
+			total_time_of_optimization,
+			total_time_of_compound_model_calculation;
 		std::vector<std::vector<size_t>> inliers_of_each_model;
 		std::vector<size_t> labeling;
+		std::vector<IterationStatistics> iteration_statistics;
+
+		void addIterationStatistics(IterationStatistics iteration_statistics_)
+		{
+			iteration_statistics.emplace_back(iteration_statistics_);
+
+			total_time_of_proposal_engine += iteration_statistics_.time_of_proposal_engine;
+			total_time_of_model_validation += iteration_statistics_.time_of_model_validation;
+			total_time_of_optimization += iteration_statistics_.time_of_optimization;
+			total_time_of_compound_model_calculation += iteration_statistics_.time_of_compound_model_update;
+		}
 	};
 
-	template<class _NeighborhoodGraph,
-		class _ModelEstimator,
-		class _MainSampler,
-		class _LocalOptimizerSampler>
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
 		class ProgressiveX
 	{
 	protected:
-		// The proposal engine estimating a putative model in the beginning of each iteration
-		std::unique_ptr<gcransac::GCRANSAC<_ModelEstimator,
+		// The proposal engine (i.e. Graph-Cut RANSAC) estimating a putative model in the beginning of each iteration
+		std::unique_ptr<gcransac::GCRANSAC<
+			// The model estimator used for estimating the instance parameters from a set of points
+			_ModelEstimator,
+			// The type of the used neighborhood graph
 			_NeighborhoodGraph,
-			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>> proposal_engine;
+			// The scoring class which consideres the compound instance when calculating the score of a model instance
+			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>> 
+			proposal_engine;
 
 		// The model optimizer optimizing the compound model parameters in each iteration
-		std::unique_ptr<pearl::PEARL<_ModelEstimator,
-			_NeighborhoodGraph>> model_optimizer;
+		std::unique_ptr<pearl::PEARL<
+			// The type of the used neighborhood graph which is needed for determining the spatial coherence cost inside PEARL
+			_NeighborhoodGraph,
+			// The model estimator used for estimating the instance parameters from a set of points
+			_ModelEstimator>> model_optimizer;
 
 		// The model estimator which estimates the model parameters from a set of points
 		_ModelEstimator model_estimator;
@@ -110,87 +128,129 @@ namespace progx
 		std::vector<progx::Model<_ModelEstimator>> models;
 
 		// The preference vector of the compound model instance
-		Eigen::MatrixXd compound_preference_vector;
+		Eigen::VectorXd compound_preference_vector;
 
-		double compound_preference_vector_sum,
-			compound_preference_vector_length,
-			truncated_squared_threshold; // The truncated squared inlier-outlier threshold
+		// The truncated squared inlier-outlier threshold
+		double truncated_squared_threshold; 
 
-		size_t number_of_iterations_without_change, // The number of consecutive iterations since nothing has happenned
-			point_number; // The number of points
+		size_t point_number; // The number of points
 
 		// The visualizer which demonstrates the procedure by showing the labeling in each intermediate step
 		ProgressVisualizer * const visualizer;
 
+		// The settings of the algorithm
+		MultiModelSettings settings;
+
+		// Setting all the initial parameters
 		void initialize(const cv::Mat &data_);
 
+		// Check if the putative model instance should be included in the optimization procedure
 		inline bool isPutativeModelValid(
-			const cv::Mat &data_,
-			const progx::Model<_ModelEstimator> &model_,
-			const gcransac::RANSACStatistics &statistics_);
+			const cv::Mat &data_, // All data points
+			progx::Model<_ModelEstimator> &model_, // The model instance to check
+			const gcransac::RANSACStatistics &statistics_); // The RANSAC statistics of the putative model
 
+		// Update the compound model's preference vector
 		void updateCompoundModel(const cv::Mat &data_);
+		
+		// Predicts the number of inliers in the data which are unseen yet, 
+		// i.e. not covered by the compound instance.
+		size_t getPredictedUnseenInliers(
+			const double confidence_, // The RANSAC confidence
+			const size_t sample_size_, // The size of a minimal sample
+			const size_t iteration_number_, // The current number of RANSAC iterations
+			const size_t inlier_number_of_compound_model_); // The number of inliers of the compound model instance
 
 	public:
-		MultiModelSettings settings;
 
 		ProgressiveX(ProgressVisualizer * const visualizer_ = nullptr) :
 			visualizer(visualizer_)
 		{
 		}
 
-		void run(const cv::Mat &data_,
-			const _NeighborhoodGraph &neighborhood_graph_, // The initialized neighborhood graph
-			_MainSampler &main_sampler,
-			_LocalOptimizerSampler &local_optimization_sampler);
+		// The function applying Progressive-X to a set of data points
+		void run(const cv::Mat &data_, // All data points
+			const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+			_MainSampler &main_sampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+			_LocalOptimizerSampler &local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 		
+		// Returns a constant reference to the settings of the multi-model fitting
+		const MultiModelSettings &getSettings() const
+		{
+			return settings;
+		}
+
+		// Returns a reference to the settings of the multi-model fitting
+		MultiModelSettings &getMutableSettings()
+		{
+			return settings;
+		}
+
+
+		// Returns a constant reference to the statistics of the multi-model fitting
 		const MultiModelStatistics &getStatistics() const
 		{
 			return statistics;
 		}
 
+		// Returns a reference to the statistics of the multi-model fitting
 		MultiModelStatistics &getMutableStatistics()
 		{
 			return statistics;
 		}
 
+		// Returns a constant reference to the estimated model instances
 		const std::vector<Model<_ModelEstimator>> &getModels() const
 		{
 			return models;
 		}
 
+		// Returns a reference to the statistics of the multi-model fitting
 		std::vector<Model<_ModelEstimator>> &getMutableModels()
 		{
 			return models;
 		}
 
+		// Returns the number of model instances estimated
 		size_t getModelNumber() const
 		{
 			return models.size();
 		}
-
 	};
 
-	template<class _NeighborhoodGraph,
-		class _ModelEstimator,
-		class _MainSampler,
-		class _LocalOptimizerSampler>
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
 	void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::run(
-		const cv::Mat &data_,
-		const _NeighborhoodGraph &neighborhood_graph_, // The initialized neighborhood graph
-		_MainSampler &main_sampler_,
-		_LocalOptimizerSampler &local_optimization_sampler_)
+		const cv::Mat &data_, // All data points
+		const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+		_MainSampler &main_sampler_, // The sampler used in the main RANSAC loop of GC-RANSAC
+		_LocalOptimizerSampler &local_optimization_sampler_) // The sampler used in the local optimization of GC-RANSAC
 	{
+		LOG(INFO) << "Progressive-X is started...";
+
 		// Initializing the procedure
 		initialize(data_);
 
-		size_t proposals_without_change = 0;
+		size_t number_of_ransac_iterations = 0, // The total number of RANSAC iterations
+			unaccepted_putative_instances = 0, // The number of consecutive putative instances not accepted to be optimized
+			unseen_inliers = point_number; // Predicted number of unseen inliers in the data		
+		std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
+		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
 
+		LOG(INFO) << "The main iteration is started...";
 		for (size_t current_iteration = 0; current_iteration < 10; ++current_iteration)
 		{
+			LOG(INFO) << "-------------------------------------------";
+			LOG(INFO) << "Iteration " << current_iteration + 1 << ".";
+
+			// Statistics of the current iteration
+			IterationStatistics iteration_statistics;
+
 			/***********************************
 			*** Model instance proposal step ***
-			***********************************/		   
+			***********************************/	
 			// The putative model proposed by the proposal engine
 			progx::Model<_ModelEstimator> putative_model;
 
@@ -198,7 +258,7 @@ namespace progx
 			proposal_engine->run(data_, // The data points
 				model_estimator, // The model estimator to be used
 				&main_sampler_, // The sampler used for the main RANSAC loop
-				&local_optimization_sampler_, // The samplre used for the local optimization
+				&local_optimization_sampler_, // The sampler used for the local optimization
 				&neighborhood_graph_, // The neighborhood graph
 				putative_model);
 
@@ -209,33 +269,156 @@ namespace progx
 			const gcransac::RANSACStatistics &proposal_engine_statistics = 
 				proposal_engine->getRansacStatistics();
 
+			// Update the current iteration's statistics
+			iteration_statistics.time_of_proposal_engine = 
+				proposal_engine_statistics.processing_time;
+
+			// Increase the total number of RANSAC iterations
+			number_of_ransac_iterations += 
+				proposal_engine_statistics.iteration_number;
+
+			LOG(INFO) << "A model proposed with " <<
+				proposal_engine_statistics.inliers.size() << " inliers\nin " <<
+				iteration_statistics.time_of_proposal_engine << " seconds (" << 
+				proposal_engine_statistics.iteration_number << " iterations).";
+
 			/*************************************
 			*** Model instance validation step ***
 			*************************************/
+			LOG(INFO) << "Check if the model should be added to the compound instance.";
+
+			// The starting time of the model validation
+			start = std::chrono::system_clock::now();
 			if (!isPutativeModelValid(data_,
 				putative_model,
 				proposal_engine_statistics))
 			{
-				number_of_iterations_without_change += proposal_engine_statistics.iteration_number;
-				++proposals_without_change;
-				if (proposals_without_change == settings.max_proposal_number_without_change)
+				LOG(INFO) << "The model is not accepted to be added to the compound instances." <<
+					" The number of consecutively rejected proposals is " << unaccepted_putative_instances <<
+					" (< " << settings.max_proposal_number_without_change << ")";
+				++unaccepted_putative_instances;
+				if (unaccepted_putative_instances == settings.max_proposal_number_without_change)
 					break;
 				continue;
 			}
+			
+			// The end time of the model validation
+			end = std::chrono::system_clock::now();
+
+			// The elapsed time in seconds
+			elapsed_seconds = end - start;
+
+			// Update the current iteration's statistics
+			iteration_statistics.time_of_model_validation =
+				elapsed_seconds.count();
+
+			LOG(INFO) << "The model has been accepted in " <<
+				iteration_statistics.time_of_model_validation << " seconds.";
 
 			/******************************************
 			*** Compound instance optimization step ***
 			******************************************/
+			// The starting time of the model optimization
+			start = std::chrono::system_clock::now();
+
 			// Add the putative instance to the compound one
 			models.emplace_back(putative_model);
 
-			// Apply the model optimizer
-			model_optimizer->run(data_,
-				&neighborhood_graph_,
-				model_estimator,
-				models);
+			// If only a single model instance is known, use the inliers of GC-RANSAC
+			// to initialize the labeling.
 
-			//statistics.inliers_of_each_model.emplace_back(proposal_engine->getRansacStatistics().inliers);
+			LOG(INFO) << "Model optimization started...";
+			if (models.size() == 1)
+			{
+				// Store the inliers of the current model to the statistics object
+				statistics.inliers_of_each_model.emplace_back(
+					proposal_engine->getRansacStatistics().inliers);
+
+				// Set the labeling so that the outliers will have label 1 and the inliers label 0.
+				std::fill(statistics.labeling.begin(), statistics.labeling.end(), 1);
+				for (const size_t &point_idx : statistics.inliers_of_each_model.back())
+					statistics.labeling[point_idx] = 0;
+			}
+			// Otherwise, apply an optimizer the determine the labeling
+			else
+			{
+				// Apply the model optimizer
+				model_optimizer->run(data_,
+					&neighborhood_graph_,
+					&model_estimator,
+					&models);
+
+				size_t model_number = 0;
+				model_optimizer->getLabeling(statistics.labeling, model_number);
+
+				if (model_number != models.size())
+				{
+					printf("A model has been removed.\n");
+				}
+			}
+
+			// The end time of the model optimization
+			end = std::chrono::system_clock::now();
+
+			// The elapsed time in seconds
+			elapsed_seconds = end - start;
+
+			// Update the current iteration's statistics
+			iteration_statistics.time_of_optimization =
+				elapsed_seconds.count();
+
+			LOG(INFO) << "Model optimization finished in " <<
+				iteration_statistics.time_of_optimization << " seconds.";
+
+			// The starting time of the model validation
+			start = std::chrono::system_clock::now();
+
+			// Update the compound model
+			updateCompoundModel(data_);
+
+			// The end time of the model optimization
+			end = std::chrono::system_clock::now();
+
+			// The elapsed time in seconds
+			elapsed_seconds = end - start;
+
+			// Update the current iteration's statistics
+			iteration_statistics.time_of_compound_model_update =
+				elapsed_seconds.count();
+
+			LOG(INFO) << "Compound instance is updated in " <<
+				iteration_statistics.time_of_compound_model_update << " seconds.";
+
+			// Store the instance number in the iteration's statistics
+			iteration_statistics.number_of_instances = models.size();
+
+			/************************************
+			*** Updating the iteration number ***
+			************************************/
+			// If there is a only a single model instance, PEARL was not applied. 
+			// Thus, the inliers are in the RANSAC statistics of the instance.
+			if (models.size() == 1)
+				unseen_inliers = getPredictedUnseenInliers(settings.one_minus_confidence, // 1.0 - confidence
+					_ModelEstimator::sampleSize(), // The size of a minimal sample
+					number_of_ransac_iterations, // The total number of RANSAC iterations applied
+					statistics.inliers_of_each_model.size()); // The inlier number of the compound model instance
+
+			else
+				unseen_inliers = getPredictedUnseenInliers(settings.one_minus_confidence, // 1.0 - confidence
+					_ModelEstimator::sampleSize(), // The size of a minimal sample
+					number_of_ransac_iterations, // The total number of RANSAC iterations applied
+					point_number - model_optimizer->getOutlierNumber()); // The inlier number of the compound model instance
+
+			// Add the current iteration's statistics to the statistics object
+			statistics.addIterationStatistics(iteration_statistics);
+
+			LOG(INFO) << "The predicted number of inliers (with confidence " << settings.confidence <<
+				")\nnot covered by the compound instance is " << unseen_inliers << ".";
+
+			// If it is likely, that there are fewer inliers in the data than the minimum number,
+			// terminate.
+			if (unseen_inliers < settings.minimum_number_of_inliers)
+				break;
 
 			// Visualize the labeling results if needed
 			if (visualizer != nullptr)
@@ -243,10 +426,31 @@ namespace progx
 				visualizer->setLabelNumber(models.size() + 1);
 				visualizer->visualize(0, "Labeling");
 			}
-
-			// Update the compound model
-			updateCompoundModel(data_);
 		}
+	}
+
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
+	size_t ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::getPredictedUnseenInliers(
+		const double one_minus_confidence_,
+		const size_t sample_size_,
+		const size_t iteration_number_,
+		const size_t inlier_number_of_compound_model_)
+	{
+		// Number of points in the data which have not yet been assigned to any model
+		const size_t unseen_point_number = point_number - inlier_number_of_compound_model_;
+
+		const double one_over_iteration_number = 1.0 / iteration_number_;
+		const double one_over_sample_size = 1.0 / sample_size_;
+
+		// Calculate the ratio of the maximum inlier number from the sample size, current iteration number and confidence
+		const double inlier_ratio = 
+			pow(1.0 - pow(one_minus_confidence_, one_over_iteration_number), one_over_sample_size);
+
+		// Return the number of unseen inliers
+		return static_cast<size_t>(std::round(unseen_point_number * inlier_ratio));
 	}
 
 	template<class _NeighborhoodGraph,
@@ -258,28 +462,19 @@ namespace progx
 		// 
 		point_number = data_.rows; // The number of data points
 		statistics.labeling.resize(point_number, 0); // The labeling which assigns each point to a model instance. Initially, all points are considered outliers.
-		number_of_iterations_without_change = 0;
-		truncated_squared_threshold = std::pow(3.0 / 2.0 * settings.inlier_outlier_threshold, 2);
-		compound_preference_vector = Eigen::MatrixXd::Zero(data_.rows, 1);
+		truncated_squared_threshold = 9.0 / 4.0 * settings.inlier_outlier_threshold *  settings.inlier_outlier_threshold;
+		compound_preference_vector = Eigen::VectorXd::Zero(data_.rows);
 
 		// Initializing the model optimizer, i.e., PEARL
-		model_optimizer = std::make_unique<pearl::PEARL<_ModelEstimator,
-			_NeighborhoodGraph>>();
+		model_optimizer = std::make_unique<pearl::PEARL<_NeighborhoodGraph,
+			_ModelEstimator>>();
 
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
 			_NeighborhoodGraph,
 			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>>();
 
-		Settings &proposal_engine_settings = proposal_engine->settings;
-		proposal_engine_settings.threshold = settings.inlier_outlier_threshold; // The inlier-outlier threshold
-		proposal_engine_settings.spatial_coherence_weight = settings.spatial_coherence_weight; // The weight of the spatial coherence term
-		proposal_engine_settings.confidence = settings.confidence; // The required confidence in the results
-		proposal_engine_settings.max_local_optimization_number = settings.max_local_optimization_number; // The maximm number of local optimizations
-		proposal_engine_settings.max_iteration_number = settings.max_ransac_iteration_number; // The maximum number of iterations
-		proposal_engine_settings.min_iteration_number = settings.min_ransac_iteration_number; // The minimum number of iterations
-		proposal_engine_settings.neighborhood_sphere_radius = settings.cell_number_in_neighborhood_graph; // The radius of the neighborhood ball
-		proposal_engine_settings.core_number = settings.core_number; // The number of parallel processes
+		proposal_engine->settings = settings.proposal_engine_settings;
 
 		MSACScoringFunctionWithCompoundModel<_ModelEstimator> &scoring =
 			proposal_engine->getMutableScoringFunction();
@@ -293,14 +488,14 @@ namespace progx
 				1); // Initially, only the outlier model instance exists
 		}
 	}
-	
-	template<class _NeighborhoodGraph,
-		class _ModelEstimator,
-		class _MainSampler,
-		class _LocalOptimizerSampler>
+
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
 	inline bool ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::isPutativeModelValid(
 		const cv::Mat &data_,
-		const progx::Model<_ModelEstimator> &model_,
+		progx::Model<_ModelEstimator> &model_,
 		const gcransac::RANSACStatistics &statistics_)
 	{
 		// Number of inliers without considering that there are more model instances in the scene
@@ -310,14 +505,26 @@ namespace progx
 		if (inlier_number < MAX(_ModelEstimator::sampleSize(), settings.minimum_number_of_inliers))
 			return false;
 
+		// Calculate the preference vector of the current model
+		model_.setPreferenceVector(data_, // All data points
+			truncated_squared_threshold); // The truncated squared threshold
+
+		// Calculate the Tanimoto-distance of the preference vectors of the current and the 
+		// compound model instance.
+		const double dot_product = model_.preference_vector.dot(compound_preference_vector);
+		double tanimoto_similarity = dot_product / 
+			(model_.preference_vector.squaredNorm() + compound_preference_vector.squaredNorm() - dot_product);
+
+		if (settings.maximum_tanimoto_similarity < tanimoto_similarity)
+			return false;
+
 		return true;
 	}
 
-
-	template<class _NeighborhoodGraph,
-		class _ModelEstimator,
-		class _MainSampler,
-		class _LocalOptimizerSampler>
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
 	void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::updateCompoundModel(const cv::Mat &data_)
 	{
 		// Do not do anything if there are no models in the compound instance
@@ -331,11 +538,6 @@ namespace progx
 		// update the preference values
 		for (auto &model : models)
 		{
-			// Initialize the model's preference vector if needed
-			if (model.preference_vector.rows() != point_number ||
-				model.preference_vector.cols() != 1)
-				model.preference_vector.resize(point_number, 1);
-
 			// Iterate through all points and estimate the preference values
 			double squared_residual;
 			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)
@@ -343,11 +545,6 @@ namespace progx
 				// The point-to-model residual
 				squared_residual = model_estimator.squaredResidual(data_.row(point_idx), model);
 				
-				// Update the preference vector of the current model since it might be changed
-				// due to the optimization.
-				model.preference_vector(point_idx) = 
-					MAX(0, 1.0 - squared_residual / truncated_squared_threshold);
-
 				// Update the preference vector of the compound model. Since the point-to-<compound model>
 				// residual is defined through the union of distance fields of the contained models,
 				// the implied preference is the highest amongst the stored model instances. 

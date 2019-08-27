@@ -9,27 +9,49 @@ namespace progx
 	class MSACScoringFunctionWithCompoundModel : public gcransac::ScoringFunction<_ModelEstimator>
 	{
 	protected:
-		double squared_truncated_threshold; // Squared truncated threshold
-		size_t point_number; // Number of points
+		// Squared truncated threshold
+		double squared_truncated_threshold;
 
+		// Number of points
+		size_t point_number; 
+
+		// The exponent of the score shared with the compound model instance and
+		// substracted from the final score.  
+		int exponent_of_shared_score;
+
+		// The pointer of the compound model instance
 		const std::vector<Model<_ModelEstimator>> *compound_model;
-		const Eigen::MatrixXd *compound_preference_vector;
+
+		// The pointer of the preference vector of the compound model instance
+		const Eigen::VectorXd *compound_preference_vector;
 
 	public:
+		MSACScoringFunctionWithCompoundModel() : exponent_of_shared_score(2)
+		{
+
+		}
+
 		~MSACScoringFunctionWithCompoundModel()
 		{
 
 		}
 
-		void setCompoundModel(const std::vector<Model<_ModelEstimator>> *compound_model_,
-			const Eigen::MatrixXd *compound_preference_vector_)
+		void setExponent(const int exponent_of_shared_score_)
+		{
+			exponent_of_shared_score = exponent_of_shared_score_;
+		}
+
+		void setCompoundModel(
+			const std::vector<Model<_ModelEstimator>> *compound_model_, // The pointer of the compound model instance
+			const Eigen::VectorXd *compound_preference_vector_) // The pointer of the preference vector of the compound model instance
 		{
 			compound_preference_vector = compound_preference_vector_;
 			compound_model = compound_model_;
 		}
 
-		void initialize(const double squared_truncated_threshold_,
-			const size_t point_number_)
+		void initialize(
+			const double squared_truncated_threshold_, // Squared truncated threshold
+			const size_t point_number_) // Number of points
 		{
 			squared_truncated_threshold = squared_truncated_threshold_;
 			point_number = point_number_;
@@ -93,7 +115,7 @@ namespace progx
 						MIN((*compound_preference_vector)(point_idx), preference_vector(point_idx));
 
 				// Substract the shared support from the score of the putative model
-				score.value -= shared_support;
+				score.value -= std::pow(shared_support, exponent_of_shared_score);
 			}
 
 			// Return the final score

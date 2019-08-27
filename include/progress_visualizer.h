@@ -21,6 +21,13 @@ namespace progx
 			point_number; // The number of points
 		std::vector<cv::Scalar> colors; // The colors which will be used when the points are visualized.
 
+		cv::Scalar getRandomColor()
+		{
+			return cv::Scalar(255 * static_cast<double>(rand()) / RAND_MAX,
+				255 * static_cast<double>(rand()) / RAND_MAX,
+				255 * static_cast<double>(rand()) / RAND_MAX);
+		}
+
 	public:
 		ProgressVisualizer(const size_t point_number_) : 
 			point_number(point_number_)
@@ -38,10 +45,14 @@ namespace progx
 			if (colors.size() < label_number)
 			{
 				colors.reserve(label_number);
-				for (size_t i = colors.size() - 1; i < label_number; ++i)
-					colors.emplace_back(255 * static_cast<double>(rand()) / RAND_MAX,
-						255 * static_cast<double>(rand()) / RAND_MAX,
-						255 * static_cast<double>(rand()) / RAND_MAX);
+
+				// Generate color for the previous outlier instance since it is now a model instance
+				colors.back() = getRandomColor();
+
+				// Generate color for every new model instances
+				for (size_t i = colors.size(); i < label_number; ++i)
+					colors.emplace_back(getRandomColor());
+
 				// The outlier instance should have black color
 				colors.back() = cv::Scalar(0, 0, 0);
 			}
@@ -57,9 +68,7 @@ namespace progx
 			// when the points are visualized.
 			colors.reserve(label_number);
 			for (size_t i = 0; i < label_number; ++i)
-				colors.emplace_back(255 * static_cast<double>(rand()) / RAND_MAX,
-					255 * static_cast<double>(rand()) / RAND_MAX,
-					255 * static_cast<double>(rand()) / RAND_MAX);
+				colors.emplace_back(getRandomColor());
 			// The outlier instance should have black color
 			colors.back() = cv::Scalar(0, 0, 0); 
 		}

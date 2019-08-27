@@ -43,21 +43,47 @@ namespace progx
 	template<class _ModelEstimator>
 	class Model : public gcransac::Model
 	{
-	protected:
-		const _ModelEstimator * estimator;
-
 	public:
-		Eigen::MatrixXd descriptor; // The descriptor of the current model
-		Eigen::MatrixXd preference_vector;
+		const _ModelEstimator * estimator;
+		Eigen::VectorXd preference_vector;
 
 		double probability,
 			preference_vector_length,
 			tanimoto_distance,
 			eucledian_distance;
 
+		const _ModelEstimator * const getEstimator() const
+		{
+			return estimator;
+		}
+
 		void setEstimator(const _ModelEstimator * estimator_)
 		{
 			estimator = estimator_;
+		}
+
+		void setDescriptor(const Eigen::MatrixXd &descriptor_)
+		{
+			descriptor = descriptor_;
+		}
+
+		void setPreferenceVector(const cv::Mat &data_,
+			const double &truncated_squared_threshold_)
+		{
+			const size_t point_number = data_.rows;
+			preference_vector.resize(point_number);
+
+			double squared_residual;
+			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)
+			{
+				// The point-to-model residual
+				squared_residual = estimator->squaredResidual(data_.row(point_idx), *this);
+
+				// Update the preference vector of the current model since it might be changed
+				// due to the optimization.
+				preference_vector(point_idx) =
+					MAX(0, 1.0 - squared_residual / truncated_squared_threshold_);
+			}
 		}
 
 		Model(const Eigen::MatrixXd &descriptor_) :

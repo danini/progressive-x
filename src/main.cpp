@@ -5,7 +5,9 @@
 #include <Eigen/Eigen>
 
 #include "utils.h"
+#include "GCoptimization.h"
 #include "grid_neighborhood_graph.h"
+#include "flann_neighborhood_graph.h"
 #include "uniform_sampler.h"
 #include "prosac_sampler.h"
 #include "progressive_napsac_sampler.h"
@@ -20,6 +22,8 @@
 #include <direct.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#include <glog/logging.h>
 
 struct stat info;
 
@@ -55,6 +59,9 @@ using namespace gcransac;
 
 int main(int argc, const char* argv[])
 {
+	// Initialize Google's logging library.
+	//google::InitGoogleLogging(argv[0]);
+
 	std::string scene = "johnssona";
 
 	printf("Processed scene = '%s'\n", scene.c_str());
@@ -191,39 +198,46 @@ void testMultiHomographyFitting(
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
 	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
 	start = std::chrono::system_clock::now(); // The starting time of the neighborhood calculation
-	neighborhood::GridNeighborhoodGraph neighborhood(&points,
-		source_image.cols / static_cast<double>(cell_number_in_neighborhood_graph_),
-		source_image.rows / static_cast<double>(cell_number_in_neighborhood_graph_),
-		destination_image.cols / static_cast<double>(cell_number_in_neighborhood_graph_),
-		destination_image.rows / static_cast<double>(cell_number_in_neighborhood_graph_),
-		cell_number_in_neighborhood_graph_);
+	neighborhood::FlannNeighborhoodGraph neighborhood(&points, 20);
 	end = std::chrono::system_clock::now(); // The end time of the neighborhood calculation
 	std::chrono::duration<double> elapsed_seconds = end - start; // The elapsed time in seconds
 	printf("Neighborhood calculation time = %f secs\n", elapsed_seconds.count());
 
 	// Checking if the neighborhood graph is initialized successfully.
-	if (!neighborhood.isInitialized())
+	/*if (!neighborhood.isInitialized())
 	{
 		fprintf(stderr, "The neighborhood graph is not initialized successfully.\n");
 		return;
-	}
+	}*/
 	
+	const double max_diagonal_length =
+		sqrt(pow(MAX(source_image.cols, destination_image.cols), 2) +
+		pow(MAX(source_image.rows, destination_image.rows), 2));
+
 	// Initializing the samplers
-	sampler::UniformSampler main_sampler(&points); // The main sampler is used inside the local optimization
+	sampler::ProgressiveNapsacSampler main_sampler(&points,
+		{16, 8, 4, 2},
+		4,
+		source_image.cols,
+		source_image.rows,
+		destination_image.cols,
+		destination_image.rows); // The main sampler is used inside the local optimization
 	sampler::UniformSampler local_optimization_sampler(&points); // The local optimization sampler is used inside the local optimization
 	
 	// Initializing a visualizer
 	progx::MultiHomographyVisualizer visualizer(&points,
 		&source_image,
-		&destination_image);
+		&destination_image,
+		0.005 * max_diagonal_length);
 
 	// Applying Progressive-X
-	progx::ProgressiveX<neighborhood::GridNeighborhoodGraph,
+	progx::ProgressiveX<neighborhood::FlannNeighborhoodGraph,
 		DefaultHomographyEstimator,
-		sampler::UniformSampler,
+		sampler::ProgressiveNapsacSampler,
 		sampler::UniformSampler> progressive_x(&visualizer);
 
-	progressive_x.settings.minimum_number_of_inliers = 8;
+	progressive_x.getMutableSettings().minimum_number_of_inliers = 20;
+	progressive_x.getMutableSettings().inlier_outlier_threshold = 0.005 * max_diagonal_length;
 
 	progressive_x.run(points,
 		neighborhood,
@@ -275,7 +289,7 @@ void testMultiHomographyFitting(
 }
 
 void drawMatches(
-	const cv::Mat &points_,
+	const cv::Mat &points_, 
 	const std::vector<size_t> &inliers_,
 	const cv::Mat &image_src_,
 	const cv::Mat &image_dst_,

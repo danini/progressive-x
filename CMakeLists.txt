@@ -5,8 +5,14 @@ project(ProgressiveX LANGUAGES CXX)
 # indicate if OPENMP should be enabled
 option(USE_OPENMP "Use OPENMP" ON)
 
-# indicate if OPENMP should be enabled
+# indicate if the sample project should be included
 option(CREATE_SAMPLE_PROJECT "Create the Sample Project" ON)
+
+# indicate if GFLags should be enabled
+option(USE_GFLAGS "Enable Google Flags." ON)
+
+# indicate if GLog should be enabled
+option(USE_GLOG "Enable Google Log." ON)
 
 # ==============================================================================
 # Check C++17 support
@@ -25,6 +31,23 @@ find_package(OpenCV 3.0 REQUIRED)
 # ==============================================================================
 find_package(Eigen3 REQUIRED)
 set(EIGEN_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
+
+# ==============================================================================
+# Find GFlags
+# ==============================================================================
+# if (USE_GFLAGS)
+# 	find_package(gflags REQUIRED)
+# 	if(NOT gflags_FOUND)
+# 		message(FATAL_ERROR "GFlags not found.")
+# 	endif()
+# endif (USE_GFLAGS)
+
+if (USE_GLOG)
+	find_package(glog REQUIRED)
+	if(NOT glog_FOUND)
+		message(FATAL_ERROR "Glog not found.")
+	endif()
+endif (USE_GLOG)
 
 # ==============================================================================
 # Find OpenMP
@@ -58,50 +81,50 @@ file(GLOB_RECURSE HDRS_GraphCutRANSAC
 file(GLOB_RECURSE SRCS_GraphCutRANSAC 
 	"graph-cut-ransac/include/*.cpp"
 )
-
-source_group(third_party\\GCOptimization FILES
-	include/GCoptimization.cpp
-	include/LinkedBlockList.cpp
-	include/graph.cpp
-	include/maxflow.cpp
-	include/block.h
-	include/energy.h
-	include/GCoptimization.h
-	include/graph.h
-	include/LinkedBlockList.h
-)
-
-source_group(Models FILES
-	include/solver_engine.h
-	include/solver_essential_matrix_five_point_stewenius.h
-	include/solver_fundamental_matrix_eight_point.h
-	include/solver_fundamental_matrix_seven_point.h
-	include/solver_homography_four_point.h
-	include/essential_estimator.h
-	include/estimator.h
-	include/fundamental_estimator.h
-	include/homography_estimator.h
-	include/model.h
-)
-
-source_group(NeighborhoodGraphs FILES
-	include/flann_neighborhood_graph.h
-	include/grid_neighborhood_graph.h
-	include/neighborhood_graph.h
-)
-
-source_group(Samplers FILES
-	include/progressive_napsac_sampler.h
-	include/prosac_sampler.h
-	include/sampler.h
-	include/uniform_sampler.h
-)
-
-source_group(Utilities FILES
-	include/utils.h
-	include/types.h
-	include/uniform_random_generator.h
-)
+# 
+# source_group(third_party\\GCOptimization FILES
+# 	include/GCoptimization.cpp
+# 	include/LinkedBlockList.cpp
+# 	include/graph.cpp
+# 	include/maxflow.cpp
+# 	include/block.h
+# 	include/energy.h
+# 	include/GCoptimization.h
+# 	include/graph.h
+# 	include/LinkedBlockList.h
+# )
+# 
+# source_group(Models FILES
+# 	include/solver_engine.h
+# 	include/solver_essential_matrix_five_point_stewenius.h
+# 	include/solver_fundamental_matrix_eight_point.h
+# 	include/solver_fundamental_matrix_seven_point.h
+# 	include/solver_homography_four_point.h
+# 	include/essential_estimator.h
+# 	include/estimator.h
+# 	include/fundamental_estimator.h
+# 	include/homography_estimator.h
+# 	include/model.h
+# )
+# 
+# source_group(NeighborhoodGraphs FILES
+# 	include/flann_neighborhood_graph.h
+# 	include/grid_neighborhood_graph.h
+# 	include/neighborhood_graph.h
+# )
+# 
+# source_group(Samplers FILES
+# 	include/progressive_napsac_sampler.h
+# 	include/prosac_sampler.h
+# 	include/sampler.h
+# 	include/uniform_sampler.h
+# )
+# 
+# source_group(Utilities FILES
+# 	include/utils.h
+# 	include/types.h
+# 	include/uniform_random_generator.h
+# )
 
 add_library(GraphCutRANSAC STATIC
 	${HDRS_GraphCutRANSAC}
@@ -110,9 +133,6 @@ add_library(GraphCutRANSAC STATIC
 
 target_link_libraries(GraphCutRANSAC
 	${OpenCV_LIBS}
-)
-
-target_link_libraries(GraphCutRANSAC
 	Eigen3::Eigen)
 
 # ==============================================================================
@@ -135,12 +155,13 @@ add_library(${PROJECT_NAME} STATIC
 	${SRCS_PROGRESSIVEX}
 )
 
-target_link_libraries(${PROJECT_NAME} 
-	${OpenCV_LIBS}
-)
+SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_libraries (${PROJECT_NAME}
-	Eigen3::Eigen)
+	${OpenCV_LIBS}
+	Eigen3::Eigen
+	glog::glog
+	gflags)
 	
 # ==============================================================================
 # Structure: Applications
@@ -151,12 +172,12 @@ if (CREATE_SAMPLE_PROJECT)
 	add_executable(SampleProject
 		src/main.cpp)
 		
-	target_link_libraries (SampleProject 
-		Eigen3::Eigen)
-		
 	target_link_libraries(SampleProject 
-		${OpenCV_LIBS}
 		${PROJECT_NAME}
+		${OpenCV_LIBS}
+		Eigen3::Eigen
+		glog::glog
+		gflags
 	)
 
 	add_dependencies(SampleProject ${PROJECT_NAME})
