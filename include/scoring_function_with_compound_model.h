@@ -26,7 +26,7 @@ namespace progx
 		const Eigen::VectorXd *compound_preference_vector;
 
 	public:
-		MSACScoringFunctionWithCompoundModel() : exponent_of_shared_score(2)
+		MSACScoringFunctionWithCompoundModel() : exponent_of_shared_score(2.5)
 		{
 
 		}
@@ -58,12 +58,13 @@ namespace progx
 		}
 
 		// Return the score of a model w.r.t. the data points and the threshold
-		inline gcransac::Score getScore(const cv::Mat &points_, // The input data points
+		inline gcransac::Score getScore(
+			const cv::Mat &points_, // The input data points
 			gcransac::Model &model_, // The current model parameters
 			const _ModelEstimator &estimator_, // The model estimator
 			const double threshold_, // The inlier-outlier threshold
 			std::vector<size_t> &inliers_, // The selected inliers
-			const gcransac::Score &best_score_ = Score(), // The score of the current so-far-the-best model
+			const gcransac::Score &best_score_ = gcransac::Score(), // The score of the current so-far-the-best model
 			const bool store_inliers_ = true) const
 		{
 			gcransac::Score score; // The current score
@@ -101,7 +102,7 @@ namespace progx
 
 				// Interrupt if there is no chance of being better than the best model
 				if (point_number - point_idx + score.inlier_number < best_score_.inlier_number)
-					return Score();
+					return gcransac::Score();
 			}
 
 			// Calculating the support shared with the compound model

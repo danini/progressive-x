@@ -4,6 +4,8 @@
 #include <random>
 #include <vector>
 
+#include <glog/logging.h>
+
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc/imgproc.hpp>
@@ -35,8 +37,10 @@ namespace progx
 
 		}
 
+		virtual void release() = 0;
+
 		virtual void visualize(const double &delay_,
-			const std::string &process_name_) const = 0;
+			const std::string &process_name_) = 0;
 
 		void setLabelNumber(size_t label_number_)
 		{
@@ -79,6 +83,9 @@ namespace progx
 	{
 	protected:
 		const double circe_radius;
+		const size_t window_width,
+			window_height;
+		std::unordered_map<std::string, cv::Mat> shown_images; // The images shown
 
 		const cv::Mat 
 			* const points, // The 2D correspondences
@@ -120,22 +127,47 @@ namespace progx
 			const cv::Mat * const points_, // The 2D correspondences
 			const cv::Mat * const image_source_, // The source image
 			const cv::Mat * const image_destination_, // The destination image
-			const double circe_radius_ = 10) : // The radius of the circles used for the drawing
+			const double circe_radius_ = 10, // The radius of the circles used for the drawing
+			const size_t window_width_ = 1600,
+			const size_t window_height_ = 1200) :
 			points(points_),
 			image_source(image_source_),
 			image_destination(image_destination_),
 			circe_radius(circe_radius_),
+			window_width(window_width_),
+			window_height(window_height_),
 			ProgressVisualizer(points_->rows)
 		{
 
 		}
 
+		~MultiHomographyVisualizer()
+		{
+			release();
+		}
+		
+		void release()
+		{
+			// Iterate through all created windows and destroy them
+			// together with the stored images. It is better not to
+			// call cv::destroyAllWindows since there might be
+			// windows created by other processes.
+			for (auto[key, value] : shown_images)
+			{
+				value.release();
+				cv::destroyWindow(key);
+			}
+			shown_images.clear();
+		}
+
 		void visualize(const double &delay_,
-			const std::string &process_name_) const
+			const std::string &process_name_)
 		{
 			if (labeling->size() != point_number)
 			{
-				fprintf(stderr, "A problem occured when doing multi-homography visualization. There are fewer labels than points when visualizing the progress.\n");
+				LOG(WARNING) << 
+					"A problem occured when doing multi-homography visualization. " <<
+					"There are fewer labels than points when visualizing the progress.";
 				return;
 			}
 
@@ -143,17 +175,34 @@ namespace progx
 			cv::Mat image_source_clone = image_source->clone();
 			cv::Mat image_destination_clone = image_destination->clone();
 
+			// Check if the process name has already been used.
+			// If yes, simply rewrite the previous image.
+			cv::Mat *current_image = nullptr;
+			if (shown_images.find(process_name_) == shown_images.end())
+			{
+				shown_images[process_name_] = 
+					cv::Mat(MAX(image_source_clone.rows, image_destination_clone.rows), // Height
+						image_source_clone.cols + image_destination_clone.cols, // Width
+						image_source_clone.type()); // Type
+			}
+
+			// Get the pointer of the images
+			current_image = &shown_images[process_name_];
+
+			// Release the shown image if it has been used
+			if (!current_image->empty())
+				current_image->release();
+
 			// Create an image containing both images
-			cv::Mat match_image;
-			match_image.create(MAX(image_source_clone.rows, image_destination_clone.rows), // Height
+			current_image->create(MAX(image_source_clone.rows, image_destination_clone.rows), // Height
 				image_source_clone.cols + image_destination_clone.cols, // Width
 				image_source_clone.type()); // Type
 
 			// Left the region-of-interest for each image in the big one
 			cv::Mat roi_img_result_left =
-				match_image(cv::Rect(0, 0, image_source_clone.cols, image_source_clone.rows)); // Img1 will be on the left part
+				(*current_image)(cv::Rect(0, 0, image_source_clone.cols, image_source_clone.rows)); // Img1 will be on the left part
 			cv::Mat roi_img_result_right =
-				match_image(cv::Rect(image_destination_clone.cols, 0, image_destination_clone.cols, image_destination_clone.rows)); // Img2 will be on the right part, we shift the roi of img1.cols on the right
+				(*current_image)(cv::Rect(image_destination_clone.cols, 0, image_destination_clone.cols, image_destination_clone.rows)); // Img2 will be on the right part, we shift the roi of img1.cols on the right
 
 			// Copy the image regions to the match image
 			cv::Mat roi_image_src = 
@@ -178,15 +227,18 @@ namespace progx
 				cv::Point2d point_destination(image_source_clone.cols + points->at<double>(point_idx, 2),
 					points->at<double>(point_idx, 3));
 
-				cv::circle(match_image, point_source, circe_radius, color, -1);
-				cv::circle(match_image, point_destination, circe_radius, color, -1);
+				cv::circle(*current_image, point_source, circe_radius, color, -1);
+				cv::circle(*current_image, point_destination, circe_radius, color, -1);
 			}
 
+			if (delay_ == 0)
+				printf("Press a button to continue...\n");
+
 			// Showing the image
-			showImage(match_image,
+			showImage(*current_image,
 				process_name_,
-				1600,
-				1200,
+				window_width,
+				window_height,
 				delay_);
 		}
 	};

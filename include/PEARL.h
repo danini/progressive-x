@@ -131,14 +131,14 @@ namespace pearl
 	class PEARL
 	{
 	public:
-		PEARL() : max_iteration_number(std::numeric_limits<size_t>::max()),
+		PEARL() : maximum_iteration_number(std::numeric_limits<size_t>::max()),
 			inlier_outlier_threshold(2.0),
 			spatial_coherence_weight(0.14),
 			model_complexity_weight(8),
-			minimum_inlier_number(50),
+			minimum_inlier_number(20),
 			alpha_expansion_engine(nullptr)
 		{
-
+			model_complexity_weight = minimum_inlier_number;
 		}
 
 		bool run(const cv::Mat &data_,
@@ -153,13 +153,23 @@ namespace pearl
 		size_t getOutlierNumber() { return outliers.size(); }
 
 	protected:
+		// The alpha-expansion engine used to obtain a labeling
 		GCoptimizationGeneralGraph *alpha_expansion_engine;
+
+		// The weight of the spatial coherence term
 		double spatial_coherence_weight,
+			// The model complexity weigth to reject insignificant model instances
 			model_complexity_weight,
+			// The inlier-outlier threshold
 			inlier_outlier_threshold;
+
+		// The number of points
 		size_t point_number,
+			// The minimum inlier number to accept a model
 			minimum_inlier_number,
-			max_iteration_number;
+			// The maximum number of iterations
+			maximum_iteration_number;
+
 		std::vector<size_t> point_to_instance_labeling;
 		std::vector<std::vector<size_t>> points_per_instance;
 		std::vector<size_t> outliers;
@@ -168,7 +178,7 @@ namespace pearl
 			const std::vector<progx::Model<_ModelEstimator>> *models_, // The models instances stored
 			const _ModelEstimator *model_estimator_, // The model estimator used for estimating the model from a set of data points
 			const _NeighborhoodGraph *neighborhood_graph_, // The neighborhood graph which is used in the spatial coherence term
-			const bool parameters_changed_, // A flag indicating if the model parameters have changed. 
+			const bool initialize_with_previous_labeling_, // A flag indicating if the labeling should be initialized using the previous one. 
 			double &energy_); // The energy of the labeling
 
 		void parameterEstimation(const cv::Mat &data_,
@@ -383,7 +393,7 @@ namespace pearl
 
 		// The main PEARL iteration doing the labeling and model refitting iteratively.
 		while (!convergenve && // Break when the results converged.
-			iteration_number++ < max_iteration_number) // Break when the maximum iteration limit has been exceeded.
+			iteration_number++ < maximum_iteration_number) // Break when the maximum iteration limit has been exceeded.
 		{
 			LOG(INFO) << "[Optimization] Iteration " << iteration_number << ".";
 
@@ -440,7 +450,7 @@ namespace pearl
 			const std::vector<progx::Model<_ModelEstimator>> *models_,
 			const _ModelEstimator *model_estimator_,
 			const _NeighborhoodGraph *neighborhood_graph_,
-			const bool parameters_changed_,
+			const bool initialize_with_previous_labeling_,
 			double &energy_)
 	{
 		// Return if there are no model instances
@@ -449,7 +459,7 @@ namespace pearl
 
 		// Set the previous labeling if nothing has changed
 		std::vector<size_t> previous_labeling;
-		if (!parameters_changed_ &&
+		if (initialize_with_previous_labeling_ &&
 			alpha_expansion_engine != nullptr)
 		{
 			previous_labeling.resize(point_number);
@@ -496,7 +506,7 @@ namespace pearl
 		
 		// If nothing has changed since the previous labeling, use
 		// the previous labels as initial values.
-		if (!parameters_changed_ &&
+		if (initialize_with_previous_labeling_ &&
 			previous_labeling.size() > 0)
 		{
 			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)

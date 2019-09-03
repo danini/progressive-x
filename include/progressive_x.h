@@ -131,7 +131,8 @@ namespace progx
 		Eigen::VectorXd compound_preference_vector;
 
 		// The truncated squared inlier-outlier threshold
-		double truncated_squared_threshold; 
+		double truncated_squared_threshold,
+			scoring_exponent; 
 
 		size_t point_number; // The number of points
 
@@ -164,7 +165,8 @@ namespace progx
 	public:
 
 		ProgressiveX(ProgressVisualizer * const visualizer_ = nullptr) :
-			visualizer(visualizer_)
+			visualizer(visualizer_),
+			scoring_exponent(2)
 		{
 		}
 
@@ -174,6 +176,11 @@ namespace progx
 			_MainSampler &main_sampler, // The sampler used in the main RANSAC loop of GC-RANSAC
 			_LocalOptimizerSampler &local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 		
+		void setScoringExponent(const double &scoring_exponent_)
+		{
+			scoring_exponent = scoring_exponent_;
+		}
+
 		// Returns a constant reference to the settings of the multi-model fitting
 		const MultiModelSettings &getSettings() const
 		{
@@ -236,7 +243,8 @@ namespace progx
 		size_t number_of_ransac_iterations = 0, // The total number of RANSAC iterations
 			unaccepted_putative_instances = 0, // The number of consecutive putative instances not accepted to be optimized
 			unseen_inliers = point_number; // Predicted number of unseen inliers in the data		
-		std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
+		std::chrono::time_point<std::chrono::system_clock> start, end, // Variables for time measurement
+			main_start = std::chrono::system_clock::now(), main_end;
 		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
 
 		LOG(INFO) << "The main iteration is started...";
@@ -353,7 +361,7 @@ namespace progx
 
 				if (model_number != models.size())
 				{
-					printf("A model has been removed.\n");
+					LOG(INFO) << "Models have been removed during the optimization.\n";
 				}
 			}
 
@@ -427,6 +435,13 @@ namespace progx
 				visualizer->visualize(0, "Labeling");
 			}
 		}
+
+		main_end = std::chrono::system_clock::now();
+
+		// The elapsed time in seconds
+		elapsed_seconds = main_end - main_start;
+
+		statistics.processing_time = elapsed_seconds.count();
 	}
 
 	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
@@ -453,13 +468,12 @@ namespace progx
 		return static_cast<size_t>(std::round(unseen_point_number * inlier_ratio));
 	}
 
-	template<class _NeighborhoodGraph,
-		class _ModelEstimator,
-		class _MainSampler,
-		class _LocalOptimizerSampler>
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
 	void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::initialize(const cv::Mat &data_)
 	{
-		// 
 		point_number = data_.rows; // The number of data points
 		statistics.labeling.resize(point_number, 0); // The labeling which assigns each point to a model instance. Initially, all points are considered outliers.
 		truncated_squared_threshold = 9.0 / 4.0 * settings.inlier_outlier_threshold *  settings.inlier_outlier_threshold;
@@ -474,12 +488,17 @@ namespace progx
 			_NeighborhoodGraph,
 			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>>();
 
-		proposal_engine->settings = settings.proposal_engine_settings;
+		gcransac::Settings &proposal_engine_settings = proposal_engine->settings;
+		proposal_engine_settings = settings.proposal_engine_settings;
+		proposal_engine_settings.confidence = settings.confidence;
+		proposal_engine_settings.threshold = settings.inlier_outlier_threshold;
+		proposal_engine_settings.spatial_coherence_weight = settings.spatial_coherence_weight;
 
 		MSACScoringFunctionWithCompoundModel<_ModelEstimator> &scoring =
 			proposal_engine->getMutableScoringFunction();
 		scoring.setCompoundModel(&models, 
 			&compound_preference_vector);
+		scoring.setExponent(scoring_exponent);
 
 		// Initialize the visualizer if needed
 		if (visualizer != nullptr)

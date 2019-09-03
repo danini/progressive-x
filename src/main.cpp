@@ -4,6 +4,7 @@
 #include <opencv2/highgui/highgui.hpp>
 #include <Eigen/Eigen>
 
+#include "progx_utils.h"
 #include "utils.h"
 #include "GCoptimization.h"
 #include "grid_neighborhood_graph.h"
@@ -23,28 +24,36 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include <mutex>
 #include <glog/logging.h>
 
 struct stat info;
 
 void testMultiHomographyFitting(
-	const std::string &source_path_,
-	const std::string &destination_path_,
-	const std::string &out_correspondence_path_,
-	const std::string &in_correspondence_path_,
-	const std::string &output_match_image_path_,
+	const std::string &scene_name_, // The name of the current scene 
+	const std::string &source_path_, // The path of the source image
+	const std::string &destination_path_, // The path of the destination image
+	const std::string &input_correspondence_path_, // The path of the detected correspondences
+	const std::string &output_correspondence_path_,  // The path of the correspondences saved with their labels
+	const std::string &output_match_image_path_, // The path where the images with the labelings are saved
 	const double confidence_,
 	const double inlier_outlier_threshold_,
 	const double spatial_coherence_weight_,
-	const size_t cell_number_in_neighborhood_graph_,
-	const int fps_);
+	const double neighborhood_ball_radius_,
+	const double maximum_tanimoto_similarity_,
+	const size_t minimum_point_number_,
+	const bool visualize_results_,
+	const bool visualize_inner_steps_,
+	const bool has_detected_correspondences_ = false);
 
 bool initializeScene(const std::string &scene_name_,
 	std::string &src_image_path_,
 	std::string &dst_image_path_,
 	std::string &input_correspondence_path_,
 	std::string &output_correspondence_path_,
-	std::string &output_matched_image_path_);
+	std::string &output_matched_image_path_,
+	const std::string &root_directory = "", // The root directory where the "results" and "data" folder are
+	const bool has_detected_correspondences_ = false); // Determine if the correspondences are stored under the data folder or should be detected later
 
 void drawMatches(
 	const cv::Mat &points_,
@@ -55,118 +64,158 @@ void drawMatches(
 	int circle_radius_,
 	const cv::Scalar &color_);
 
-using namespace gcransac;
+std::vector<std::string> getAvailableTestScenes();
 
 int main(int argc, const char* argv[])
 {
 	// Initialize Google's logging library.
-	//google::InitGoogleLogging(argv[0]);
+	google::InitGoogleLogging(argv[0]);
 
-	std::string scene = "johnssona";
+	const std::string root_directory = 
+		"e:/Dani/Kutatás/Projektek/InDefenseOfSeqRANSAC/general_version/VisionFrameWork/";
 
-	printf("Processed scene = '%s'\n", scene.c_str());
-	std::string src_image_path, // Path of the source image
-		dst_image_path, // Path of the destination image
-		input_correspondence_path, // Path where the detected correspondences are saved
-		output_correspondence_path, // Path where the inlier correspondences are saved
-		output_matched_image_path; // Path where the matched image is saved
+	const bool visualize_results = true, // A flag to tell if the resulting labeling should be visualized
+		visualize_inner_steps = false; // A flag to tell if the steps of the algorithm should be visualized
+	const size_t minimum_point_number = 14; // The minimum number of inliers needed to accept a model instance
+	const double confidence = 0.99, // The required confidence in the results
+		maximum_tanimoto_similarity = 0.3,
+		neighborhood_ball_radius = 20.0, // The radius of the ball hyper-sphere used for determining the neighborhood graph.
+		spatial_coherence_weight = 0.4, // 
+		inlier_outlier_threshold = 2.0; // 
 
-	// Initializing the paths
-	initializeScene(scene,
-		src_image_path,
-		dst_image_path,
-		input_correspondence_path,
-		output_correspondence_path,
-		output_matched_image_path);
+	for (const std::string &scene : getAvailableTestScenes())
+	{
+		printf("Processed scene = %s.\n", scene.c_str());
 
-	testMultiHomographyFitting(
-		src_image_path, // The source image's path
-		dst_image_path, // The destination image's path
-		input_correspondence_path, // The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
-		output_correspondence_path, // The path where the inliers of the estimated fundamental matrices will be saved
-		output_matched_image_path, // The path where the matched image pair will be saved
-		0.99, // The RANSAC confidence value
-		1.0, // The used inlier-outlier threshold in GC-RANSAC.
-		0.14, // The weight of the spatial coherence term in the graph-cut energy minimization.
-		8, // The radius of the neighborhood ball for determining the neighborhoods.
-		-1); // The required FPS limit. If it is set to -1, the algorithm will not be interrupted before finishing.
+		std::string src_image_path, // Path of the source image
+			dst_image_path, // Path of the destination image
+			input_correspondence_path, // Path where the detected correspondences are saved
+			output_correspondence_path, // Path where the inlier correspondences are saved
+			output_matched_image_path; // Path where the matched image is saved
+
+		// Initializing the paths 
+		initializeScene(scene, // The scene's name
+			src_image_path, // The path of the source image
+			dst_image_path, // The path of the destination image
+			input_correspondence_path, // The path of the detected correspondences
+			output_correspondence_path, // The path of the correspondences saved with their labels
+			output_matched_image_path, // The path where the images with the labelings are saved
+			root_directory, // The root directory where the "results" and "data" folder are
+			true); // In this dataset, the correspondences and a reference labeling are provided
+
+		testMultiHomographyFitting(
+			scene, // The name of the current scene
+			src_image_path, // The source image's path
+			dst_image_path, // The destination image's path
+			input_correspondence_path, // The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
+			output_correspondence_path, // The path where the inliers of the estimated fundamental matrices will be saved
+			output_matched_image_path, // The path where the matched image pair will be saved
+			confidence, // The RANSAC confidence value
+			inlier_outlier_threshold, // The used inlier-outlier threshold in GC-RANSAC.
+			spatial_coherence_weight, // The weight of the spatial coherence term in the graph-cut energy minimization.
+			neighborhood_ball_radius, // The radius of the neighborhood ball for determining the neighborhoods.
+			maximum_tanimoto_similarity, // The maximum Tanimoto similarity of the proposal and compound instances.
+			minimum_point_number, // The minimum number of inlier for a model to be kept.
+			visualize_results, // A flag to determine if the results should be visualized
+			visualize_inner_steps, // A flag to determine if the inner steps should be visualized.
+			true);  // In this dataset, the correspondences and a reference labeling are provided
+	}
 
 	return 0;
 }
 
 std::vector<std::string> getAvailableTestScenes()
 {
-	return { "johnssona" };
+	return { //"stairs", "boxesandbooks", "glasscasea", "glasscaseb",
+		"johnssona", "johnssonb", "napiera", "napierb",
+		"hartley",
+		"unionhouse", "neem", "barrsmith", 
+		"bonhall", 
+		"elderhalla", "elderhallb", 
+		"ladysymon", "library", "nese", 
+		"oldclassicswing", 
+		"physics", "sene", 
+		"unihouse", "bonython"};
 }
 
-bool initializeScene(const std::string &scene_name_,
-	std::string &src_image_path_,
-	std::string &dst_image_path_,
-	std::string &input_correspondence_path_,
-	std::string &output_correspondence_path_,
-	std::string &output_matched_image_path_)
+bool initializeScene(const std::string &scene_name_, // The scene's name
+	std::string &src_image_path_, // The path of the source image
+	std::string &dst_image_path_, // The path of the destination image
+	std::string &input_correspondence_path_, // The path of the detected correspondences
+	std::string &output_correspondence_path_, // The path of the correspondences saved with their labels
+	std::string &output_matched_image_path_, // The path where the images with the labelings are saved 
+	const std::string &root_directory_, // The root directory where the "results" and "data" folder are
+	const bool has_detected_correspondences_) // Determine if the correspondences are stored under the data folder or should be detected later
 {
-	// The root directory where the "results" and "data" folder are
-	const std::string root_dir = "";
-
 	// The directory to which the results will be saved
-	std::string dir = root_dir + "results/" + scene_name_;
+	std::string dir = "results/" + scene_name_;
 
 	// Create the task directory if it doesn't exist
 	if (stat(dir.c_str(), &info) != 0) // Check if exists
 		if (_mkdir(dir.c_str()) != 0) // Create it, if not
 		{
-			fprintf(stderr, "Error while creating a new folder in 'results'\n");
+			LOG(FATAL) << 
+				"Error while creating a new folder in \"results\"\n";
 			return false;
 		}
 
 	// The source image's path
 	src_image_path_ =
-		root_dir + "data/" + scene_name_ + "/" + scene_name_ + "1.jpg";
+		root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "1.jpg";
 	if (cv::imread(src_image_path_).empty())
-		src_image_path_ = root_dir + "data/" + scene_name_ + "/" + scene_name_ + "1.png";
+		src_image_path_ = root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "1.png";
 	if (cv::imread(src_image_path_).empty())
 	{
-		fprintf(stderr, "Error while loading image '%s'\n", src_image_path_);
+		LOG(FATAL) << "Error while loading source image \"" <<
+			src_image_path_ << "\"";
 		return false;
 	}
 
 	// The destination image's path
 	dst_image_path_ =
-		root_dir + "data/" + scene_name_ + "/" + scene_name_ + "2.jpg";
+		root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "2.jpg";
 	if (cv::imread(dst_image_path_).empty())
-		dst_image_path_ = root_dir + "data/" + scene_name_ + "/" + scene_name_ + "2.png";
+		dst_image_path_ = root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "2.png";
 	if (cv::imread(dst_image_path_).empty())
 	{
-		fprintf(stderr, "Error while loading image '%s'\n", dst_image_path_);
+		LOG(FATAL) << "Error while loading destination image \"" <<
+			dst_image_path_ << "\"";
 		return false;
 	}
 
 	// The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
-	input_correspondence_path_ =
-		root_dir + "results/" + scene_name_ + "/" + scene_name_ + "_points_with_no_annotation.txt";
+	if (has_detected_correspondences_) // If the correspondences are provided with the dataset, load them.
+		input_correspondence_path_ = 
+			root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "_annot.txt";
+	else // Otherwise, they will be saved under folder "results".
+		input_correspondence_path_ =
+			"results/" + scene_name_ + "/" + scene_name_ + "_points_with_no_annotation.txt";
 	// The path where the inliers of the estimated fundamental matrices will be saved
 	output_correspondence_path_ =
-		root_dir + "results/" + scene_name_ + "/result_" + scene_name_ + ".txt";
+		"results/" + scene_name_ + "/result_" + scene_name_ + ".txt";
 	// The path where the matched image pair will be saved
 	output_matched_image_path_ =
-		root_dir + "results/" + scene_name_ + "/matches_" + scene_name_ + ".png";
+		"results/" + scene_name_ + "/matches_" + scene_name_ + ".png";
 
 	return true;
 }
 
-
 void testMultiHomographyFitting(
-	const std::string &source_path_,
-	const std::string &destination_path_,
-	const std::string &out_correspondence_path_,
-	const std::string &in_correspondence_path_,
-	const std::string &output_match_image_path_,
-	const double confidence_,
-	const double inlier_outlier_threshold_,
-	const double spatial_coherence_weight_,
-	const size_t cell_number_in_neighborhood_graph_,
-	const int fps_)
+	const std::string &scene_name_, // The name of the current scene 
+	const std::string &source_path_, // The path of the source image
+	const std::string &destination_path_, // The path of the destination image
+	const std::string &input_correspondence_path_, // The path of the detected correspondences
+	const std::string &output_correspondence_path_,  // The path of the correspondences saved with their labels
+	const std::string &output_match_image_path_, // The path where the images with the labelings are saved
+	const double confidence_, // The RANSAC confidence value
+	const double inlier_outlier_threshold_, // The used inlier-outlier threshold in GC-RANSAC.
+	const double spatial_coherence_weight_, // The weight of the spatial coherence term in the graph-cut energy minimization.
+	const double neighborhood_ball_radius_, // The radius of the neighborhood ball for determining the neighborhoods.
+	const double maximum_tanimoto_similarity_, // The maximum Tanimoto similarity of the proposal and compound instances.
+	const size_t minimum_point_number_, // The minimum number of inlier for a model to be kept.
+	const bool visualize_results_, // A flag to determine if the results should be visualized
+	const bool visualize_inner_steps_, // A flag to determine if the inner steps should be visualized.
+	const bool has_detected_correspondences_)
 {
 	// Read the images
 	cv::Mat source_image = cv::imread(source_path_); // The source image
@@ -174,118 +223,125 @@ void testMultiHomographyFitting(
 
 	if (source_image.empty()) // Check if the source image is loaded successfully
 	{
-		printf("An error occured while loading image '%s'\n",
-			source_path_.c_str());
+		LOG(FATAL) << 
+			"An error occured while loading image \"" << source_path_ << "\"";
 		return;
 	}
 
 	if (destination_image.empty()) // Check if the destination image is loaded successfully
 	{
-		printf("An error occured while loading image '%s'\n",
-			destination_path_.c_str());
+		LOG(FATAL) << 
+			"An error occured while loading image \"" << destination_path_ << "\"";
 		return;
 	}
 
 	// Detect or load point correspondences using AKAZE 
 	cv::Mat points;
-	detectFeatures(
-		in_correspondence_path_, // The path where the correspondences are read from or saved to.
-		source_image, // The source image
-		destination_image, // The destination image
-		points); // The detected point correspondences. Each row is of format "x1 y1 x2 y2"
+	std::vector<size_t> reference_labeling;
+	size_t reference_model_number = 0;
+	if (has_detected_correspondences_)
+		loadPointsWithLabels(points,
+			reference_labeling,
+			reference_model_number,
+			input_correspondence_path_.c_str());
+	else
+		detectFeatures(
+			input_correspondence_path_, // The path where the correspondences are read from or saved to.
+			source_image, // The source image
+			destination_image, // The destination image
+			points); // The detected point correspondences. Each row is of format "x1 y1 x2 y2"
 	
 	// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
 	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
 	start = std::chrono::system_clock::now(); // The starting time of the neighborhood calculation
-	neighborhood::FlannNeighborhoodGraph neighborhood(&points, 20);
+	gcransac::neighborhood::FlannNeighborhoodGraph neighborhood(&points, // All data points
+		neighborhood_ball_radius_); // The radius of the neighborhood ball for determining the neighborhoods.
 	end = std::chrono::system_clock::now(); // The end time of the neighborhood calculation
 	std::chrono::duration<double> elapsed_seconds = end - start; // The elapsed time in seconds
-	printf("Neighborhood calculation time = %f secs\n", elapsed_seconds.count());
 
-	// Checking if the neighborhood graph is initialized successfully.
-	/*if (!neighborhood.isInitialized())
-	{
-		fprintf(stderr, "The neighborhood graph is not initialized successfully.\n");
-		return;
-	}*/
+	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
 	
+	// Calculating the maximal diagonal size of the images.
+	// This value will be then used to determine a threshold adaptively,
+	// based on the image size.
 	const double max_diagonal_length =
 		sqrt(pow(MAX(source_image.cols, destination_image.cols), 2) +
 		pow(MAX(source_image.rows, destination_image.rows), 2));
 
-	// Initializing the samplers
-	sampler::ProgressiveNapsacSampler main_sampler(&points,
-		{16, 8, 4, 2},
-		4,
-		source_image.cols,
-		source_image.rows,
-		destination_image.cols,
-		destination_image.rows); // The main sampler is used inside the local optimization
-	sampler::UniformSampler local_optimization_sampler(&points); // The local optimization sampler is used inside the local optimization
+	// The main sampler is used inside the local optimization
+	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
+		{16, 8, 4, 2}, // The layer structure of the sampler's multiple grids
+		gcransac::DefaultHomographyEstimator::sampleSize(), // The size of a minimal sample
+		source_image.cols, // The width of the source image
+		source_image.rows, // The height of the source image
+		destination_image.cols, // The width of the destination image
+		destination_image.rows); // The height of the destination image
+
+	// The local optimization sampler is used inside the local optimization
+	gcransac::sampler::UniformSampler local_optimization_sampler(&points); 
 	
-	// Initializing a visualizer
-	progx::MultiHomographyVisualizer visualizer(&points,
-		&source_image,
-		&destination_image,
-		0.005 * max_diagonal_length);
+	// Initializing the multi-homography visualizer which will show
+	// the results of each step of Progressive-X.
+	progx::MultiHomographyVisualizer visualizer(&points, // All data points
+		&source_image, // A pointer to the source image
+		&destination_image, // A pointer to the destination image
+		0.005 * max_diagonal_length); // The radius of the drawn circles
 
 	// Applying Progressive-X
-	progx::ProgressiveX<neighborhood::FlannNeighborhoodGraph,
-		DefaultHomographyEstimator,
-		sampler::ProgressiveNapsacSampler,
-		sampler::UniformSampler> progressive_x(&visualizer);
+	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
+		gcransac::DefaultHomographyEstimator, // The type of the used model estimator
+		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
+		progressive_x( 
+			// If the results should be visualized pass the point of the visualizer.
+			// Otherwise, set it to a null pointer.
+			visualize_inner_steps_ ? 
+				&visualizer : 
+				nullptr);
 
-	progressive_x.getMutableSettings().minimum_number_of_inliers = 20;
-	progressive_x.getMutableSettings().inlier_outlier_threshold = 0.005 * max_diagonal_length;
+	// Set the parameters of Progressive-X
+	progx::MultiModelSettings &settings = progressive_x.getMutableSettings();
+	// The minimum number of inlier required to keep a model instance.
+	// This value is used to determine the label cost weight in the alpha-expansion of PEARL.
+	settings.minimum_number_of_inliers = minimum_point_number_;
+	// The inlier-outlier threshold
+	settings.inlier_outlier_threshold = inlier_outlier_threshold_;
+	// The required confidence in the results
+	settings.confidence = confidence_;
+	// The maximum Tanimoto similarity of the proposal and compound instances
+	settings.maximum_tanimoto_similarity = maximum_tanimoto_similarity_;
+	// The weight of the spatial coherence term
+	settings.spatial_coherence_weight = spatial_coherence_weight_;
 
-	progressive_x.run(points,
-		neighborhood,
-		main_sampler,
-		local_optimization_sampler);
+	progressive_x.run(points, // All data points
+		neighborhood, // The neighborhood graph
+		main_sampler, // The main sampler used in GC-RANSAC
+		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
+		
+	// Calculate the misclassification error if a reference labeling is known
+	double misclassification_error = getMisclassificationError(
+		progressive_x.getModels(), 
+		reference_labeling, 
+		progressive_x.getModelNumber(),
+		reference_model_number);
 
-	cv::Mat match_image;
-	match_image.create(source_image.rows, // Height
-		2 * source_image.cols, // Width
-		source_image.type()); // Type
-	
-	cv::Mat roi_img_result_left =
-		match_image(cv::Rect(0, 0, source_image.cols, source_image.rows)); // Img1 will be on the left part
-	cv::Mat roi_img_result_right =
-		match_image(cv::Rect(destination_image.cols, 0, destination_image.cols, destination_image.rows)); // Img2 will be on the right part, we shift the roi of img1.cols on the right
+	printf("Processing time = %f secs.\n", progressive_x.getStatistics().processing_time);
+	printf("Misclassification error <= %f\%.\n", misclassification_error);
+	printf("Number of found model instances = %d (there are %d instances in the reference labeling).\n", progressive_x.getModelNumber(), reference_model_number);
 
-	cv::Mat roi_image_src = source_image(cv::Rect(0, 0, source_image.cols, source_image.rows));
-	cv::Mat roi_image_dst = destination_image(cv::Rect(0, 0, destination_image.cols, destination_image.rows));
-
-	roi_image_src.copyTo(roi_img_result_left); //Img1 will be on the left of imgResult
-	roi_image_dst.copyTo(roi_img_result_right); //Img2 will be on the right of imgResult
-
-	for (const auto &inliers : progressive_x.getStatistics().inliers_of_each_model)
+	// Visualize the final results if needed
+	if (visualize_results_)
 	{
-		printf("Number of inliers = %d\n", inliers.size());
-
-		cv::Scalar color(255 * static_cast<double>(rand()) / RAND_MAX,
-			255 * static_cast<double>(rand()) / RAND_MAX,
-			255 * static_cast<double>(rand()) / RAND_MAX);
-
-		// Draw the inlier matches to the images	
-		drawMatches(points,
-			inliers,
-			source_image,
-			destination_image,
-			match_image,
-			10,
-			color);
+		// If the visualizer has not been initialize, initialize it.
+		if (!visualize_inner_steps_)
+			visualizer.setLabeling(&progressive_x.getStatistics().labeling, // The obtained labeling
+				progressive_x.getModelNumber() + 1); // The number of labels
+		visualizer.visualize(0, // If the delay is 0, it will wait for key press.
+			"Resulting labeling"); // The name of the window
 	}
-
-	printf("Press a button to continue...\n");
-
-	// Showing the image
-	showImage(match_image,
-		"Inlier correspondences",
-		1600,
-		1200,
-		true);
+	visualizer.release();
+	printf("\n");
 }
 
 void drawMatches(
