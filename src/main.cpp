@@ -29,6 +29,8 @@
 
 struct stat info;
 
+enum Problem { Homography, TwoViewMotion };
+
 void testMultiHomographyFitting(
 	const std::string &scene_name_, // The name of the current scene 
 	const std::string &source_path_, // The path of the source image
@@ -64,7 +66,7 @@ void drawMatches(
 	int circle_radius_,
 	const cv::Scalar &color_);
 
-std::vector<std::string> getAvailableTestScenes();
+std::vector<std::string> getAvailableTestScenes(const Problem &problem_);
 
 int main(int argc, const char* argv[])
 {
@@ -72,7 +74,7 @@ int main(int argc, const char* argv[])
 	google::InitGoogleLogging(argv[0]);
 
 	const std::string root_directory = 
-		"e:/Dani/Kutatás/Projektek/InDefenseOfSeqRANSAC/general_version/VisionFrameWork/";
+		"";
 
 	const bool visualize_results = true, // A flag to tell if the resulting labeling should be visualized
 		visualize_inner_steps = false; // A flag to tell if the steps of the algorithm should be visualized
@@ -83,7 +85,7 @@ int main(int argc, const char* argv[])
 		spatial_coherence_weight = 0.4, // 
 		inlier_outlier_threshold = 2.0; // 
 
-	for (const std::string &scene : getAvailableTestScenes())
+	for (const std::string &scene : getAvailableTestScenes(Problem::Homography))
 	{
 		printf("Processed scene = %s.\n", scene.c_str());
 
@@ -124,18 +126,15 @@ int main(int argc, const char* argv[])
 	return 0;
 }
 
-std::vector<std::string> getAvailableTestScenes()
+std::vector<std::string> getAvailableTestScenes(const Problem &problem_)
 {
-	return { //"stairs", "boxesandbooks", "glasscasea", "glasscaseb",
-		"johnssona", "johnssonb", "napiera", "napierb",
-		"hartley",
-		"unionhouse", "neem", "barrsmith", 
-		"bonhall", 
-		"elderhalla", "elderhallb", 
-		"ladysymon", "library", "nese", 
-		"oldclassicswing", 
-		"physics", "sene", 
-		"unihouse", "bonython"};
+	switch (problem_)
+	{
+	case Problem::Homography:
+		return { "oldclassicswing", "unihouse", "unionhouse", "bonhall" };
+	default:
+		return {};
+	}
 }
 
 bool initializeScene(const std::string &scene_name_, // The scene's name
