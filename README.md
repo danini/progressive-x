@@ -25,7 +25,7 @@ $ cd build_dir
 
 3. Configure CMAKE.
 ```shell
-$ cmake-gui .
+$ cmake-gui ..
 ```
 
 # Example project
