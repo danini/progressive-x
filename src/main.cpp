@@ -29,7 +29,7 @@
 
 struct stat info;
 
-enum Problem { Homography, TwoViewMotion };
+enum Problem { Homography, TwoViewMotion, RigidMotion };
 
 void testMultiHomographyFitting(
 	const std::string &scene_name_, // The name of the current scene 
@@ -135,6 +135,9 @@ std::vector<std::string> getAvailableTestScenes(const Problem &problem_)
 	case Problem::Homography:	
 		return { "oldclassicswing", "unihouse", "unionhouse" };
 	case Problem::TwoViewMotion:
+		LOG(WARNING) << "Multiple two-motion fitting is not implemented yet. Coming soon...";
+		return {};
+	case Problem::RigidMotion:
 		LOG(WARNING) << "Multi-motion fitting is not implemented yet. Coming soon...";
 		return {};
 	default:
