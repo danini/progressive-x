@@ -48,4 +48,4 @@ Next to the executable, copy the `data` folder and, also, create a `results` fol
 
 When using the algorithm, please cite `Barath, Daniel, and Matas, Jiří. "Progressive-X: Efficient, Anytime, Multi-Model Fitting Algorithm". Proceedings of the IEEE International Conference on Computer Vision. 2019`.
 
-If you use it with Graph-Cut RANSAC as a proposal engine, please cite `Barath, Daniel, and Matas, Jiří. "Graph-cut RANSAC." Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. 2018`.
+If you use Progressive-X with Graph-Cut RANSAC as a proposal engine, please cite `Barath, Daniel, and Matas, Jiří. "Graph-cut RANSAC." Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition. 2018`.
