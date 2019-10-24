@@ -66,6 +66,9 @@ void drawMatches(
 	int circle_radius_,
 	const cv::Scalar &color_);
 
+std::mutex writing_mutex;
+int settings_number = 0;
+
 std::vector<std::string> getAvailableTestScenes(const Problem &problem_);
 
 int main(int argc, const char* argv[])
@@ -73,18 +76,17 @@ int main(int argc, const char* argv[])
 	// Initialize Google's logging library.
 	google::InitGoogleLogging(argv[0]);
 
-	const std::string root_directory = 
-		"";
+	const std::string root_directory = ""; // The directory where the 'data' folder is found
 
 	const bool visualize_results = true, // A flag to tell if the resulting labeling should be visualized
 		visualize_inner_steps = false; // A flag to tell if the steps of the algorithm should be visualized
 	const size_t minimum_point_number = 14; // The minimum number of inliers needed to accept a model instance
-	const double confidence = 0.99, // The required confidence in the results
+	const double confidence = 0.80, // The required confidence in the results
 		maximum_tanimoto_similarity = 0.3,
 		neighborhood_ball_radius = 20.0, // The radius of the ball hyper-sphere used for determining the neighborhood graph.
 		spatial_coherence_weight = 0.4, // 
 		inlier_outlier_threshold = 2.0; // 
-
+	
 	for (const std::string &scene : getAvailableTestScenes(Problem::Homography))
 	{
 		printf("Processed scene = %s.\n", scene.c_str());
@@ -130,13 +132,17 @@ std::vector<std::string> getAvailableTestScenes(const Problem &problem_)
 {
 	switch (problem_)
 	{
-	case Problem::Homography:
-		return { "oldclassicswing", "unihouse", "unionhouse", "bonhall" };
+	case Problem::Homography:	
+		return { "oldclassicswing", "unihouse", "unionhouse" };
+	case Problem::TwoViewMotion:
+		LOG(WARNING) << "Multi-motion fitting is not implemented yet. Coming soon...";
+		return {};
 	default:
 		return {};
 	}
 }
 
+// Initializing the paths regarding the current scene
 bool initializeScene(const std::string &scene_name_, // The scene's name
 	std::string &src_image_path_, // The path of the source image
 	std::string &dst_image_path_, // The path of the destination image
@@ -148,16 +154,7 @@ bool initializeScene(const std::string &scene_name_, // The scene's name
 {
 	// The directory to which the results will be saved
 	std::string dir = "results/" + scene_name_;
-
-	// Create the task directory if it doesn't exist
-	if (stat(dir.c_str(), &info) != 0) // Check if exists
-		if (_mkdir(dir.c_str()) != 0) // Create it, if not
-		{
-			LOG(FATAL) << 
-				"Error while creating a new folder in \"results\"\n";
-			return false;
-		}
-
+	
 	// The source image's path
 	src_image_path_ =
 		root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "1.jpg";
@@ -185,7 +182,7 @@ bool initializeScene(const std::string &scene_name_, // The scene's name
 	// The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
 	if (has_detected_correspondences_) // If the correspondences are provided with the dataset, load them.
 		input_correspondence_path_ = 
-			root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + "_annot.txt";
+			root_directory_ + "data/" + scene_name_ + "/" + scene_name_ + ".txt";
 	else // Otherwise, they will be saved under folder "results".
 		input_correspondence_path_ =
 			"results/" + scene_name_ + "/" + scene_name_ + "_points_with_no_annotation.txt";
@@ -222,14 +219,14 @@ void testMultiHomographyFitting(
 
 	if (source_image.empty()) // Check if the source image is loaded successfully
 	{
-		LOG(FATAL) << 
+		LOG(FATAL) <<
 			"An error occured while loading image \"" << source_path_ << "\"";
 		return;
 	}
 
 	if (destination_image.empty()) // Check if the destination image is loaded successfully
 	{
-		LOG(FATAL) << 
+		LOG(FATAL) <<
 			"An error occured while loading image \"" << destination_path_ << "\"";
 		return;
 	}
@@ -249,7 +246,7 @@ void testMultiHomographyFitting(
 			source_image, // The source image
 			destination_image, // The destination image
 			points); // The detected point correspondences. Each row is of format "x1 y1 x2 y2"
-	
+
 	// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
 	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
@@ -260,17 +257,17 @@ void testMultiHomographyFitting(
 	std::chrono::duration<double> elapsed_seconds = end - start; // The elapsed time in seconds
 
 	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
-	
+
 	// Calculating the maximal diagonal size of the images.
 	// This value will be then used to determine a threshold adaptively,
 	// based on the image size.
 	const double max_diagonal_length =
 		sqrt(pow(MAX(source_image.cols, destination_image.cols), 2) +
-		pow(MAX(source_image.rows, destination_image.rows), 2));
+			pow(MAX(source_image.rows, destination_image.rows), 2));
 
 	// The main sampler is used inside the local optimization
 	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
-		{16, 8, 4, 2}, // The layer structure of the sampler's multiple grids
+		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
 		gcransac::DefaultHomographyEstimator::sampleSize(), // The size of a minimal sample
 		source_image.cols, // The width of the source image
 		source_image.rows, // The height of the source image
@@ -278,8 +275,8 @@ void testMultiHomographyFitting(
 		destination_image.rows); // The height of the destination image
 
 	// The local optimization sampler is used inside the local optimization
-	gcransac::sampler::UniformSampler local_optimization_sampler(&points); 
-	
+	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
+
 	// Initializing the multi-homography visualizer which will show
 	// the results of each step of Progressive-X.
 	progx::MultiHomographyVisualizer visualizer(&points, // All data points
@@ -292,12 +289,12 @@ void testMultiHomographyFitting(
 		gcransac::DefaultHomographyEstimator, // The type of the used model estimator
 		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
-		progressive_x( 
+		progressive_x(
 			// If the results should be visualized pass the point of the visualizer.
 			// Otherwise, set it to a null pointer.
-			visualize_inner_steps_ ? 
-				&visualizer : 
-				nullptr);
+			visualize_inner_steps_ ?
+			&visualizer :
+			nullptr);
 
 	// Set the parameters of Progressive-X
 	progx::MultiModelSettings &settings = progressive_x.getMutableSettings();
@@ -317,11 +314,11 @@ void testMultiHomographyFitting(
 		neighborhood, // The neighborhood graph
 		main_sampler, // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
-		
+
 	// Calculate the misclassification error if a reference labeling is known
 	double misclassification_error = getMisclassificationError(
-		progressive_x.getModels(), 
-		reference_labeling, 
+		progressive_x.getModels(),
+		reference_labeling,
 		progressive_x.getModelNumber(),
 		reference_model_number);
 
