@@ -117,7 +117,8 @@ target_link_libraries (${PROJECT_NAME}
 	${OpenCV_LIBS}
 	Eigen3::Eigen
 	glog::glog
-	gflags)
+	gflags,
+	GraphCutRANSAC)
 	
 # ==============================================================================
 # Structure: Applications
@@ -134,6 +135,7 @@ if (CREATE_SAMPLE_PROJECT)
 		Eigen3::Eigen
 		glog::glog
 		gflags
+		GraphCutRANSAC
 	)
 
 	add_dependencies(SampleProject ${PROJECT_NAME})
