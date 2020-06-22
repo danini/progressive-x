@@ -32,7 +32,7 @@ namespace progx
 	struct MultiModelSettings
 	{
 		// The settings of the proposal engine
-		gcransac::Settings proposal_engine_settings;
+		gcransac::utils::Settings proposal_engine_settings;
 
 		size_t minimum_number_of_inliers,
 			max_proposal_number_without_change,
@@ -59,6 +59,7 @@ namespace progx
 			proposal_engine_settings.max_local_optimization_number = 50;
 			proposal_engine_settings.threshold = inlier_outlier_threshold;
 			proposal_engine_settings.confidence = confidence;
+			proposal_engine_settings.spatial_coherence_weight = 0.975;
 		}
 	};
 
@@ -149,7 +150,7 @@ namespace progx
 		inline bool isPutativeModelValid(
 			const cv::Mat &data_, // All data points
 			progx::Model<_ModelEstimator> &model_, // The model instance to check
-			const gcransac::RANSACStatistics &statistics_); // The RANSAC statistics of the putative model
+			const gcransac::utils::RANSACStatistics &statistics_); // The RANSAC statistics of the putative model
 
 		// Update the compound model's preference vector
 		void updateCompoundModel(const cv::Mat &data_);
@@ -269,12 +270,16 @@ namespace progx
 				&local_optimization_sampler_, // The sampler used for the local optimization
 				&neighborhood_graph_, // The neighborhood graph
 				putative_model);
+			
+			if (putative_model.descriptor.rows() == 0 ||
+				putative_model.descriptor.cols() == 0)
+				continue;
 
 			// Set a reference to the model estimator in the putative model instance
 			putative_model.setEstimator(&model_estimator);
 						
 			// Get the RANSAC statistics to know the inliers of the proposal
-			const gcransac::RANSACStatistics &proposal_engine_statistics = 
+			const gcransac::utils::RANSACStatistics &proposal_engine_statistics = 
 				proposal_engine->getRansacStatistics();
 
 			// Update the current iteration's statistics
@@ -488,7 +493,7 @@ namespace progx
 			_NeighborhoodGraph,
 			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>>();
 
-		gcransac::Settings &proposal_engine_settings = proposal_engine->settings;
+		gcransac::utils::Settings &proposal_engine_settings = proposal_engine->settings;
 		proposal_engine_settings = settings.proposal_engine_settings;
 		proposal_engine_settings.confidence = settings.confidence;
 		proposal_engine_settings.threshold = settings.inlier_outlier_threshold;
@@ -515,7 +520,7 @@ namespace progx
 	inline bool ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::isPutativeModelValid(
 		const cv::Mat &data_,
 		progx::Model<_ModelEstimator> &model_,
-		const gcransac::RANSACStatistics &statistics_)
+		const gcransac::utils::RANSACStatistics &statistics_)
 	{
 		// Number of inliers without considering that there are more model instances in the scene
 		const size_t inlier_number = statistics_.inliers.size();
