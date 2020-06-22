@@ -66,7 +66,7 @@ endif (USE_OPENMP)
 # ==============================================================================
 include_directories (
 	${PROJECT_SOURCE_DIR}/include
-	${PROJECT_SOURCE_DIR}/graph-cut-ransac/include
+	${PROJECT_SOURCE_DIR}/graph-cut-ransac/src/pygcransac/include
 )
 
 # ==============================================================================
@@ -74,12 +74,12 @@ include_directories (
 # ==============================================================================
 # Set header files for the library
 file(GLOB_RECURSE HDRS_GraphCutRANSAC
-	"graph-cut-ransac/include/*.h"
+	"graph-cut-ransac/src/pygcransac/include/*.h"
 ) 
 
 # Set source files to be added to the library
 file(GLOB_RECURSE SRCS_GraphCutRANSAC 
-	"graph-cut-ransac/include/*.cpp"
+	"graph-cut-ransac/src/pygcransac/include/*.cpp"
 )
 
 add_library(GraphCutRANSAC STATIC
@@ -117,7 +117,7 @@ target_link_libraries (${PROJECT_NAME}
 	${OpenCV_LIBS}
 	Eigen3::Eigen
 	glog::glog
-	gflags,
+	gflags
 	GraphCutRANSAC)
 	
 # ==============================================================================
