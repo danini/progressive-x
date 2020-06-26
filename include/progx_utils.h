@@ -5,6 +5,7 @@
 #include <functional>
 #include <sstream>
 #include <vector>
+#include <iterator>
 #include <set>
 
 #include <glog/logging.h>
