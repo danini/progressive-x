@@ -97,15 +97,57 @@ int main(int argc, const char* argv[])
 
 	const bool visualize_results = true, // A flag to tell if the resulting labeling should be visualized
 		visualize_inner_steps = false; // A flag to tell if the steps of the algorithm should be visualized
+	
+	const double confidence = 0.9, // The required confidence in the results
+		maximum_tanimoto_similarity = 0.9, // The maximum tanimoto similarity used to reject models early
+		spatial_coherence_weight = 0.1, // The spatial coherence weight used both in PEARL and GC-RANSAC
+		neighborhood_ball_radius = 20.0; // The radius of the ball hyper-sphere used for determining the neighborhood graph.
+
+	for (const std::string &scene : getAvailableTestScenes(Problem::Homography))
+	{
+		const size_t minimum_point_number = 2 * 4; // The minimum number of inliers needed to accept a model instance, i.e., two times the sample size
+		const double inlier_outlier_threshold = 3.0; // The inlier-outlier threshold used to assign points to models
+			
+		printf("Processed scene = %s.\n", scene.c_str());
+
+		std::string src_image_path, // Path of the source image
+			dst_image_path, // Path of the destination image
+			input_correspondence_path, // Path where the detected correspondences are saved
+			output_correspondence_path, // Path where the inlier correspondences are saved
+			output_matched_image_path; // Path where the matched image is saved
+
+		// Initializing the paths 
+		initializeScene(scene, // The scene's name
+			src_image_path, // The path of the source image
+			dst_image_path, // The path of the destination image
+			input_correspondence_path, // The path of the detected correspondences
+			output_correspondence_path, // The path of the correspondences saved with their labels
+			output_matched_image_path, // The path where the images with the labelings are saved
+			root_directory, // The root directory where the "results" and "data" folder are
+			true); // In this dataset, the correspondences and a reference labeling are provided
+
+		testMultiHomographyFitting(
+			scene, // The name of the current scene
+			src_image_path, // The source image's path
+			dst_image_path, // The destination image's path
+			input_correspondence_path, // The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
+			output_correspondence_path, // The path where the inliers of the estimated fundamental matrices will be saved
+			output_matched_image_path, // The path where the matched image pair will be saved
+			confidence, // The RANSAC confidence value
+			inlier_outlier_threshold, // The used inlier-outlier threshold in GC-RANSAC.
+			spatial_coherence_weight, // The weight of the spatial coherence term in the graph-cut energy minimization.
+			neighborhood_ball_radius, // The radius of the neighborhood ball for determining the neighborhoods.
+			maximum_tanimoto_similarity, // The maximum Tanimoto similarity of the proposal and compound instances.
+			minimum_point_number, // The minimum number of inlier for a model to be kept.
+			visualize_results, // A flag to determine if the results should be visualized
+			visualize_inner_steps, // A flag to determine if the inner steps should be visualized.
+			true);  // In this dataset, the correspondences and a reference labeling are provided
+	}
 
 	for (const std::string &scene : getAvailableTestScenes(Problem::TwoViewMotion))
 	{
-		const size_t minimum_point_number = 1; // The minimum number of inliers needed to accept a model instance
-		const double confidence = 0.8, // The required confidence in the results
-			maximum_tanimoto_similarity = 0.9, // The maximum tanimoto similarity used to reject models early
-			neighborhood_ball_radius = 20.0, // The radius of the ball hyper-sphere used for determining the neighborhood graph.
-			spatial_coherence_weight = 0.975, // The spatial coherence weight used both in PEARL and GC-RANSAC
-			inlier_outlier_threshold = 0.75; // The inlier-outlier threshold used to assign points to models
+		const size_t minimum_point_number = 2 * 7; // The minimum number of inliers needed to accept a model instance, i.e., two times the sample size
+		const double inlier_outlier_threshold = 0.75; // The inlier-outlier threshold used to assign points to models
 
 		printf("Processed scene = %s.\n", scene.c_str());
 
@@ -143,51 +185,6 @@ int main(int argc, const char* argv[])
 			true);  // In this dataset, the correspondences and a reference labeling are provided
 	}
 
-	for (const std::string &scene : getAvailableTestScenes(Problem::Homography))
-	{
-		const size_t minimum_point_number = 14; // The minimum number of inliers needed to accept a model instance
-		const double confidence = 0.80, // The required confidence in the results
-			maximum_tanimoto_similarity = 0.3, // The maximum tanimoto similarity used to reject models early
-			neighborhood_ball_radius = 20.0, // The radius of the ball hyper-sphere used for determining the neighborhood graph.
-			spatial_coherence_weight = 0.975, // The spatial coherence weight used both in PEARL and GC-RANSAC
-			inlier_outlier_threshold = 2.0; // The inlier-outlier threshold used to assign points to models
-
-		printf("Processed scene = %s.\n", scene.c_str());
-
-		std::string src_image_path, // Path of the source image
-			dst_image_path, // Path of the destination image
-			input_correspondence_path, // Path where the detected correspondences are saved
-			output_correspondence_path, // Path where the inlier correspondences are saved
-			output_matched_image_path; // Path where the matched image is saved
-
-		// Initializing the paths 
-		initializeScene(scene, // The scene's name
-			src_image_path, // The path of the source image
-			dst_image_path, // The path of the destination image
-			input_correspondence_path, // The path of the detected correspondences
-			output_correspondence_path, // The path of the correspondences saved with their labels
-			output_matched_image_path, // The path where the images with the labelings are saved
-			root_directory, // The root directory where the "results" and "data" folder are
-			true); // In this dataset, the correspondences and a reference labeling are provided
-
-		testMultiHomographyFitting(
-			scene, // The name of the current scene
-			src_image_path, // The source image's path
-			dst_image_path, // The destination image's path
-			input_correspondence_path, // The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
-			output_correspondence_path, // The path where the inliers of the estimated fundamental matrices will be saved
-			output_matched_image_path, // The path where the matched image pair will be saved
-			confidence, // The RANSAC confidence value
-			inlier_outlier_threshold, // The used inlier-outlier threshold in GC-RANSAC.
-			spatial_coherence_weight, // The weight of the spatial coherence term in the graph-cut energy minimization.
-			neighborhood_ball_radius, // The radius of the neighborhood ball for determining the neighborhoods.
-			maximum_tanimoto_similarity, // The maximum Tanimoto similarity of the proposal and compound instances.
-			minimum_point_number, // The minimum number of inlier for a model to be kept.
-			visualize_results, // A flag to determine if the results should be visualized
-			visualize_inner_steps, // A flag to determine if the inner steps should be visualized.
-			true);  // In this dataset, the correspondences and a reference labeling are provided
-	}
-
 	return 0;
 }
 
@@ -196,10 +193,9 @@ std::vector<std::string> getAvailableTestScenes(const Problem &problem_)
 	switch (problem_)
 	{
 	case Problem::Homography:	
-		return { "oldclassicswing", "unihouse", "unionhouse" };
+		return { "unionhouse", "oldclassicswing", "unihouse"};
 	case Problem::TwoViewMotion:
-		LOG(WARNING) << "Multiple two-motion fitting is not implemented yet. Coming soon...";
-		return { "book", "breadcube", "cubetoy"};
+		return { "book", "breadcube", "cubetoy" };
 	case Problem::RigidMotion:
 		LOG(WARNING) << "Multi-motion fitting is not implemented yet. Coming soon...";
 		return {};
@@ -536,7 +532,7 @@ void testMultiHomographyFitting(
 	printf("Processing time = %f secs.\n", progressive_x.getStatistics().processing_time);
 	printf("Misclassification error <= %f\%.\n", misclassification_error);
 	printf("Number of found model instances = %d (there are %d instances in the reference labeling).\n", progressive_x.getModelNumber(), reference_model_number);
-
+	
 	// Visualize the final results if needed
 	if (visualize_results_)
 	{
