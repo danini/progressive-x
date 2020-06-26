@@ -263,6 +263,10 @@ namespace progx
 			// The putative model proposed by the proposal engine
 			progx::Model<_ModelEstimator> putative_model;
 
+			// Reset the samplers
+			main_sampler_.reset();
+			local_optimization_sampler_.reset();
+
 			// Applying the proposal engine to get a new putative model
 			proposal_engine->run(data_, // The data points
 				model_estimator, // The model estimator to be used
@@ -490,6 +494,7 @@ namespace progx
 				settings.inlier_outlier_threshold,
 				settings.spatial_coherence_weight,
 				settings.minimum_number_of_inliers);
+		
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
 			_NeighborhoodGraph,
