@@ -131,14 +131,17 @@ namespace pearl
 	class PEARL
 	{
 	public:
-		PEARL() : maximum_iteration_number(std::numeric_limits<size_t>::max()),
-			inlier_outlier_threshold(2.0),
-			spatial_coherence_weight(0.14),
-			model_complexity_weight(8),
-			minimum_inlier_number(20),
+		PEARL(double inlier_outlier_threshold_,
+			double spatial_coherence_weight_,
+			size_t minimum_inlier_number_,
+			const size_t maximum_iteration_number_ = std::numeric_limits<size_t>::max()) :
+			maximum_iteration_number(maximum_iteration_number_),
+			inlier_outlier_threshold(inlier_outlier_threshold_),
+			spatial_coherence_weight(spatial_coherence_weight_),
+			model_complexity_weight(minimum_inlier_number_),
+			minimum_inlier_number(minimum_inlier_number_),
 			alpha_expansion_engine(nullptr)
 		{
-			model_complexity_weight = minimum_inlier_number;
 		}
 
 		bool run(const cv::Mat &data_,
@@ -151,7 +154,7 @@ namespace pearl
 			size_t &instance_number_);
 
 		size_t getOutlierNumber() { return outliers.size(); }
-
+		
 	protected:
 		// The alpha-expansion engine used to obtain a labeling
 		GCoptimizationGeneralGraph *alpha_expansion_engine;
@@ -284,7 +287,7 @@ namespace pearl
 				changed_ = true;
 
 				LOG(INFO) << "[Optimization] Instance " << instance_idx << 
-					" is rejected due to having to few inliers (" << inlier_number  << ").";
+					" is rejected due to having too few inliers (" << inlier_number  << ").";
 			}
 		}
 

@@ -486,8 +486,10 @@ namespace progx
 
 		// Initializing the model optimizer, i.e., PEARL
 		model_optimizer = std::make_unique<pearl::PEARL<_NeighborhoodGraph,
-			_ModelEstimator>>();
-
+			_ModelEstimator>>(
+				settings.inlier_outlier_threshold,
+				settings.spatial_coherence_weight,
+				settings.minimum_number_of_inliers);
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
 			_NeighborhoodGraph,
