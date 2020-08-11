@@ -3,36 +3,36 @@
 The Progressive-X algorithm proposed in paper: Daniel Barath and Jiri Matas; Progressive-X: Efficient, Anytime, Multi-Model Fitting Algorithm, International Conference on Computer Vision, 2019. 
 It is available at https://arxiv.org/pdf/1906.02290
 
-# Installation
+# Installation C++
 
-1. Getting the sources (and the submodules):
+To build and install C++ only `Progressive-X`, clone or download this repository and then build the project by CMAKE. 
 ```shell
 $ git clone --recursive https://github.com/danini/progressive-x.git
+$ cd build
+$ cmake ..
+$ make
 ```
+
+# Install Python package and compile C++
+
+```bash
+python3 ./setup.py install
+```
+
 or
-```shell
-$ git clone https://github.com/danini/progressive-x.git
-$ cd progressive-x
-$ git submodule init
-$ git submodule update
-```
 
-2. Make a directory for the build files to be generated.
-```shell
-$ mkdir build_dir
-$ cd build_dir
-```
-
-3. Configure CMAKE.
-```shell
-$ cmake-gui ..
+```bash
+pip3 install -e .
 ```
 
 # Example project
 
 To build the sample project showing examples of fundamental matrix, homography and essential matrix fitting, set variable `CREATE_SAMPLE_PROJECT = ON` when creating the project in CMAKE. 
-
-Next to the executable, copy the `data` folder and, also, create a `results` folder. 
+Then 
+```shell
+$ cd build
+$ ./SampleProject
+```
 
 # Requirements
 
