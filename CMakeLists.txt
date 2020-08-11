@@ -14,6 +14,15 @@ option(USE_GFLAGS "Enable Google Flags." ON)
 # indicate if GLog should be enabled
 option(USE_GLOG "Enable Google Log." ON)
 
+SET (CMAKE_BUILD_TYPE "RELEASE")
+
+IF(CMAKE_COMPILER_IS_GNUCXX)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wno-strict-aliasing")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -Wno-write-strings")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated -ansi")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -ftree-vectorize -funroll-loops")
+ENDIF(CMAKE_COMPILER_IS_GNUCXX)
+
 # ==============================================================================
 # Check C++17 support
 # ==============================================================================
@@ -24,7 +33,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # ==============================================================================
 # Find OpenCV
 # ==============================================================================
-find_package(OpenCV 3.0 REQUIRED)
+find_package(OpenCV)
+if (OPENCV_FOUND)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${OpenCV_CXX_FLAGS}")
+  	add_definitions(-DUSE_OPENMP)
+	set(TRGT_LNK_LBS_ADDITIONAL OpenMP::OpenMP_CXX)
+endif (OPENCV_FOUND)
 
 # ==============================================================================
 # Find Eigen
@@ -35,19 +49,51 @@ set(EIGEN_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 # ==============================================================================
 # Find GFlags
 # ==============================================================================
-# if (USE_GFLAGS)
-# 	find_package(gflags REQUIRED)
-# 	if(NOT gflags_FOUND)
-# 		message(FATAL_ERROR "GFlags not found.")
-# 	endif()
-# endif (USE_GFLAGS)
+find_package(gflags REQUIRED)
+if(DEFINED gflags_VERSION_STRING OR DEFINED GFLAGS_VERSION_STRING)
+        # different cmake variable with lower or upper case exist
+        set(GFLAGS_INCLUDE_DIR ${GFLAGS_INCLUDE_DIR})
+        #set(GFLAGS_INCLUDE_DIR ${GFLAGS_INCLUDE_DIR} ${gflags_INCLUDE_DIR})
+        set(GFLAGS_LIBRARIES ${GFLAGS_LIBRARIES})
+        #set(GFLAGS_LIBRARIES ${GFLAGS_LIBRARIES} ${gflags_LIBRARIES})
+  message( "Found Gflags ${GFLAGS_VERSION_STRING}" )
+  message( STATUS "> GFLAGS_INCLUDE_DIR:   ${GFLAGS_INCLUDE_DIR}" )
+  message( STATUS "> GFLAGS_LIBRARIES:   ${GFLAGS_LIBRARIES}" )
+endif()
 
-if (USE_GLOG)
-	find_package(glog REQUIRED)
-	if(NOT glog_FOUND)
-		message(FATAL_ERROR "Glog not found.")
-	endif()
-endif (USE_GLOG)
+# ==============================================================================
+# Find GLOG
+# ==============================================================================
+#include(FindPackageHandleStandardArgs)
+#
+#set(GLOG_ROOT_DIR "" CACHE PATH "Folder contains Google glog")
+# 
+#find_path(GLOG_INCLUDE_DIR glog/logging.h
+#    PATHS
+#        ${GLOG_ROOT_DIR}
+#    PATH_SUFFIXES
+#        src)
+# 
+#find_library(GLOG_LIBRARY glog libglog
+#    PATHS
+#        ${GLOG_ROOT_DIR}
+#    PATH_SUFFIXES
+#        .libs
+#        lib
+#        lib64)
+# 
+#find_package_handle_standard_args(GLOG DEFAULT_MSG
+#    GLOG_INCLUDE_DIR GLOG_LIBRARY)
+# 
+#if(GLOG_FOUND)
+#    set(GLOG_INCLUDE_DIRS ${GLOG_INCLUDE_DIR})
+#    set(GLOG_LIBRARIES ${GLOG_LIBRARY})
+#endif()
+#
+find_package(glog REQUIRED)
+if(NOT glog_FOUND)
+	message(FATAL_ERROR "Glog not found.")
+endif()
 
 # ==============================================================================
 # Find OpenMP
@@ -64,9 +110,11 @@ endif (USE_OPENMP)
 # ==============================================================================
 # Includes
 # ==============================================================================
+SET(SOURCE_DIR "src/pyprogressivex")
+
 include_directories (
-	${PROJECT_SOURCE_DIR}/include
 	${PROJECT_SOURCE_DIR}/graph-cut-ransac/src/pygcransac/include
+	${GLOG_INCLUDE_DIR}
 )
 
 # ==============================================================================
@@ -94,24 +142,40 @@ target_link_libraries(GraphCutRANSAC
 # ==============================================================================
 # Structure: Progressive-X Library
 # ==============================================================================
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+
+# Tell cmake that headers are in alse in source_dir
+include_directories(${SOURCE_DIR}/include)
 
 # Set header files for the library
 file(GLOB_RECURSE HDRS_PROGRESSIVEX
-	"include/*.h"
+	"${SOURCE_DIR}/include/*.h"
 ) 
 
 # Set source files to be added to the library
 file(GLOB_RECURSE SRCS_PROGRESSIVEX 
-	"include/*.cpp"
+	"${SOURCE_DIR}/include/*.cpp"
 )
+
+# ==============================================================================
+# Structure: Python binding
+# ==============================================================================
+# Generate python module
+add_subdirectory(lib/pybind11)
+
+pybind11_add_module(pyprogressivex ${SOURCE_DIR}/src/bindings.cpp ${SOURCE_DIR}/src/progressivex_python.cpp  ${HDRS_PROGRESSIVEX} ${SRCS_PROGRESSIVEX} )
+target_link_libraries(pyprogressivex PRIVATE  
+	${OpenCV_LIBS} 
+	Eigen3::Eigen 
+	glog::glog 
+	gflags
+	GraphCutRANSAC)
 
 add_library(${PROJECT_NAME} STATIC
 	${HDRS_PROGRESSIVEX}
 	${SRCS_PROGRESSIVEX}
 )
 
-SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
+# SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_libraries (${PROJECT_NAME}
 	${OpenCV_LIBS}
@@ -120,21 +184,23 @@ target_link_libraries (${PROJECT_NAME}
 	gflags
 	GraphCutRANSAC)
 	
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
+	
 # ==============================================================================
 # Structure: Applications
 # ==============================================================================
 if (CREATE_SAMPLE_PROJECT)
-	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/bin)
+	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build)
 
 	add_executable(SampleProject
-		src/main.cpp)
+		examples/cpp_example.cpp)
 		
-	target_link_libraries(SampleProject 
-		${PROJECT_NAME}
+	target_link_libraries(SampleProject PUBLIC
 		${OpenCV_LIBS}
+		${PROJECT_NAME}
 		Eigen3::Eigen
-		glog::glog
 		gflags
+		glog::glog
 		GraphCutRANSAC
 	)
 
