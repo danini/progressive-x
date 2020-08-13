@@ -395,6 +395,7 @@ void testMulti6DPoseFitting(
 
 	progressive_x.run(normalized_points, // All data points
 		neighborhood, // The neighborhood graph
+		gcransac::utils::DefaultPnPEstimator(), // The used estimator
 		main_sampler, // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 	
@@ -568,6 +569,7 @@ void testMultiTwoViewMotionFitting(
 	
 	progressive_x.run(points, // All data points
 		neighborhood, // The neighborhood graph
+		gcransac::utils::DefaultFundamentalMatrixEstimator(), // The used estimator
 		main_sampler, // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 
@@ -713,6 +715,7 @@ void testMultiHomographyFitting(
 
 	progressive_x.run(points, // All data points
 		neighborhood, // The neighborhood graph
+		gcransac::utils::DefaultHomographyEstimator(), // The used estimator
 		main_sampler, // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 

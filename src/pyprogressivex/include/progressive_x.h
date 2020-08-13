@@ -40,6 +40,7 @@ namespace progx
 			maximum_model_number;
 
 		double maximum_tanimoto_similarity,
+			minimum_triangle_size,
 			confidence, // Required confidence in the result
 			one_minus_confidence, // 1 - confidence
 			inlier_outlier_threshold, // The inlier-outlier threshold
@@ -53,6 +54,7 @@ namespace progx
 
 		MultiModelSettings() :
 			maximum_tanimoto_similarity(0.5),
+			minimum_triangle_size(100),
 			minimum_number_of_inliers(20),
 			cell_number_in_neighborhood_graph(8),
 			max_proposal_number_without_change(10),
@@ -116,7 +118,7 @@ namespace progx
 			// The type of the used neighborhood graph
 			_NeighborhoodGraph,
 			// The scoring class which consideres the compound instance when calculating the score of a model instance
-			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>> 
+			EPOSScoringFunctionWithCompoundModel<_ModelEstimator>>> 
 			proposal_engine;
 
 		// The model optimizer optimizing the compound model parameters in each iteration
@@ -127,7 +129,7 @@ namespace progx
 			_ModelEstimator>> model_optimizer;
 
 		// The model estimator which estimates the model parameters from a set of points
-		_ModelEstimator model_estimator;
+		_ModelEstimator *model_estimator;
 
 		// The statistics of Progressive-X containing everything which the user might be curious about,
 		// e.g., processing time, results, etc.
@@ -182,6 +184,7 @@ namespace progx
 		// The function applying Progressive-X to a set of data points
 		void run(const cv::Mat &data_, // All data points
 			const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+			_ModelEstimator &model_estimator_, // The used model estimator
 			_MainSampler &main_sampler, // The sampler used in the main RANSAC loop of GC-RANSAC
 			_LocalOptimizerSampler &local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 		
@@ -241,6 +244,7 @@ namespace progx
 	void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::run(
 		const cv::Mat &data_, // All data points
 		const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+		_ModelEstimator &model_estimator_,
 		_MainSampler &main_sampler_, // The sampler used in the main RANSAC loop of GC-RANSAC
 		_LocalOptimizerSampler &local_optimization_sampler_) // The sampler used in the local optimization of GC-RANSAC
 	{
@@ -255,6 +259,7 @@ namespace progx
 		std::chrono::time_point<std::chrono::system_clock> start, end, // Variables for time measurement
 			main_start = std::chrono::system_clock::now(), main_end;
 		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
+		model_estimator = &model_estimator_;
 
 		LOG(INFO) << "The main iteration is started...";
 		for (size_t current_iteration = 0; current_iteration < 10; ++current_iteration)
@@ -277,7 +282,7 @@ namespace progx
 
 			// Applying the proposal engine to get a new putative model
 			proposal_engine->run(data_, // The data points
-				model_estimator, // The model estimator to be used
+				*model_estimator, // The model estimator to be used
 				&main_sampler_, // The sampler used for the main RANSAC loop
 				&local_optimization_sampler_, // The sampler used for the local optimization
 				&neighborhood_graph_, // The neighborhood graph
@@ -288,7 +293,7 @@ namespace progx
 				continue;
 
 			// Set a reference to the model estimator in the putative model instance
-			putative_model.setEstimator(&model_estimator);
+			putative_model.setEstimator(model_estimator);
 						
 			// Get the RANSAC statistics to know the inliers of the proposal
 			const gcransac::utils::RANSACStatistics &proposal_engine_statistics = 
@@ -370,7 +375,7 @@ namespace progx
 				// Apply the model optimizer
 				model_optimizer->run(data_,
 					&neighborhood_graph_,
-					&model_estimator,
+					model_estimator,
 					&models);
 
 				size_t model_number = 0;
@@ -510,7 +515,7 @@ namespace progx
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
 			_NeighborhoodGraph,
-			MSACScoringFunctionWithCompoundModel<_ModelEstimator>>>();
+			EPOSScoringFunctionWithCompoundModel<_ModelEstimator>>>();
 
 		gcransac::utils::Settings &proposal_engine_settings = proposal_engine->settings;
 		proposal_engine_settings = settings.proposal_engine_settings;
@@ -518,7 +523,7 @@ namespace progx
 		proposal_engine_settings.threshold = settings.inlier_outlier_threshold;
 		proposal_engine_settings.spatial_coherence_weight = settings.spatial_coherence_weight;
 
-		MSACScoringFunctionWithCompoundModel<_ModelEstimator> &scoring =
+		EPOSScoringFunctionWithCompoundModel<_ModelEstimator> &scoring =
 			proposal_engine->getMutableScoringFunction();
 		scoring.setCompoundModel(&models, 
 			&compound_preference_vector);
@@ -586,7 +591,7 @@ namespace progx
 			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)
 			{
 				// The point-to-model residual
-				squared_residual = model_estimator.squaredResidual(data_.row(point_idx), model);
+				squared_residual = model_estimator->squaredResidual(data_.row(point_idx), model);
 				
 				// Update the preference vector of the compound model. Since the point-to-<compound model>
 				// residual is defined through the union of distance fields of the contained models,
