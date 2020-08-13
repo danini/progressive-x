@@ -13,6 +13,7 @@ int find6DPoses_(
 	const double &neighborhood_ball_radius,
 	const double &maximum_tanimoto_similarity,
 	const double &scaling_from_millimeters,
+	const double &minimum_coverage,
 	const double &minimum_triangle_size,
 	const size_t &max_iters,
 	const size_t &minimum_point_number,

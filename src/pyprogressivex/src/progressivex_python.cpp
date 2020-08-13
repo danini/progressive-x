@@ -46,6 +46,7 @@ int find6DPoses_(
 	const double &neighborhood_ball_radius,
 	const double &maximum_tanimoto_similarity,
 	const double &scaling_from_millimeters,
+	const double &minimum_coverage,
 	const double &minimum_triangle_size,
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
@@ -97,7 +98,6 @@ int find6DPoses_(
 			y = points.at<double>(i, 6);
 		pixels[std::make_pair(x, y)] = 1;
 	}
-	int min_coverage = pixels.size();
 	
 	// Normalize the threshold
 	const double f = 0.5 * (K(0,0) + K(1,1));
@@ -171,7 +171,7 @@ int find6DPoses_(
 		settings.proposal_engine_settings.max_iteration_number = max_iters;
 		// Set the number of pixels covered by an object		
 		settings.proposal_engine_settings.used_pixels = pixels.size();
-		settings.proposal_engine_settings.minimum_pixel_coverage = min_coverage;
+		settings.proposal_engine_settings.minimum_pixel_coverage = minimum_coverage;
 		// The weight of the spatial coherence term
 		settings.proposal_engine_settings.spatial_coherence_weight = spatial_coherence_weight; 
 		// The required confidence in the results
@@ -224,7 +224,7 @@ int find6DPoses_(
 		
 		GCRANSAC<PnPEstimator, neighborhood::FlannNeighborhoodGraph, EPOSScoringFunction<PnPEstimator>> gcransac;
 		gcransac.settings.threshold = normalized_threshold; // The inlier-outlier threshold
-		gcransac.settings.minimum_pixel_coverage = min_coverage;
+		gcransac.settings.minimum_pixel_coverage = minimum_coverage;
 		gcransac.settings.spatial_coherence_weight = spatial_coherence_weight; // The weight of the spatial coherence term
 		gcransac.settings.confidence = confidence; // The required confidence in the results
 		gcransac.settings.max_local_optimization_number = 50; // The maximum number of local optimizations

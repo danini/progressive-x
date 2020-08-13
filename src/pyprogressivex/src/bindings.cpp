@@ -11,15 +11,16 @@ py::tuple find6DPoses(
 	py::array_t<double>  x2y2z2_,
 	py::array_t<double>  K_,
 	double threshold,
-	int maximum_model_number,
+	int max_model_number,
 	double conf,
 	double spatial_coherence_weight,
 	double neighborhood_ball_radius,
-	double maximum_tanimoto_similarity,
+	double max_tanimoto_similarity,
 	double scaling_from_millimeters,
-	double minimum_triangle_size,
+	double min_triangle_area,
+	double min_coverage,
 	int max_iters,
-	int minimum_point_number) 
+	int min_point_number) 
 {
 	py::buffer_info buf1 = x1y1_.request();
 	size_t NUM_TENTS = buf1.shape[0];
@@ -76,12 +77,13 @@ py::tuple find6DPoses(
 		threshold,
 		conf,
 		neighborhood_ball_radius,
-		maximum_tanimoto_similarity,
-		maximum_tanimoto_similarity,
+		max_tanimoto_similarity,
+		max_tanimoto_similarity,
 		scaling_from_millimeters,
+		min_coverage,
 		max_iters,
-		minimum_point_number,
-		maximum_model_number);
+		min_point_number,
+		max_model_number);
 
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
 	py::buffer_info buf3 = labeling_.request();
@@ -104,10 +106,10 @@ py::tuple findHomographies(
 	double conf,
 	double spatial_coherence_weight,
 	double neighborhood_ball_radius,
-	double maximum_tanimoto_similarity,
+	double max_tanimoto_similarity,
 	int max_iters,
 	int minimum_point_number,
-	int maximum_model_number) {
+	int max_model_number) {
 		
 	py::buffer_info buf1 = x1y1_.request();
 	size_t NUM_TENTS = buf1.shape[0];
@@ -150,10 +152,10 @@ py::tuple findHomographies(
 		threshold,
 		conf,
 		neighborhood_ball_radius,
-		maximum_tanimoto_similarity,
+		max_tanimoto_similarity,
 		max_iters,
 		minimum_point_number,
-		maximum_model_number);
+		max_model_number);
 		
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
 	py::buffer_info buf3 = labeling_.request();
@@ -178,10 +180,10 @@ py::tuple findTwoViewMotions(
 	double conf,
 	double spatial_coherence_weight,
 	double neighborhood_ball_radius,
-	double maximum_tanimoto_similarity,
+	double max_tanimoto_similarity,
 	int max_iters,
 	int minimum_point_number,
-	int maximum_model_number) 
+	int max_model_number) 
 {		
 	py::buffer_info buf1 = x1y1_.request();
 	size_t NUM_TENTS = buf1.shape[0];
@@ -224,10 +226,10 @@ py::tuple findTwoViewMotions(
 		threshold,
 		conf,
 		neighborhood_ball_radius,
-		maximum_tanimoto_similarity,
+		max_tanimoto_similarity,
 		max_iters,
 		minimum_point_number,
-		maximum_model_number);
+		max_model_number);
 		
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
 	py::buffer_info buf3 = labeling_.request();
@@ -265,10 +267,10 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("conf") = 0.90,
 		py::arg("spatial_coherence_weight") = 0.1,
 		py::arg("neighborhood_ball_radius") = 20.0,
-		py::arg("maximum_tanimoto_similarity") = 0.9,
+		py::arg("max_tanimoto_similarity") = 0.9,
 		py::arg("max_iters") = 1000,
 		py::arg("minimum_point_number") = 2 * 4,
-		py::arg("maximum_model_number") = -1);
+		py::arg("max_model_number") = -1);
 
 	m.def("findTwoViewMotions", &findTwoViewMotions, R"doc(some doc)doc",
 		py::arg("x1y1"),
@@ -277,25 +279,26 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("conf") = 0.90,
 		py::arg("spatial_coherence_weight") = 0.1,
 		py::arg("neighborhood_ball_radius") = 20.0,
-		py::arg("maximum_tanimoto_similarity") = 0.9,
+		py::arg("max_tanimoto_similarity") = 0.9,
 		py::arg("max_iters") = 1000,
 		py::arg("minimum_point_number") = 2 * 7,
-		py::arg("maximum_model_number") = -1);
+		py::arg("max_model_number") = -1);
 		
 	m.def("find6DPoses", &find6DPoses, R"doc(some doc)doc",
 		py::arg("x1y1"),
 		py::arg("x2y2z2"),
 		py::arg("K"),
 		py::arg("threshold") = 4.0,
-		py::arg("maximum_model_number") = -1,
+		py::arg("max_model_number") = -1,
 		py::arg("conf") = 0.90,
 		py::arg("spatial_coherence_weight") = 0.1,
 		py::arg("neighborhood_ball_radius") = 20.0,
-		py::arg("maximum_tanimoto_similarity") = 0.9,
+		py::arg("max_tanimoto_similarity") = 0.9,
 		py::arg("scaling_from_millimeters") = 0.1,
-		py::arg("minimum_triangle_size") = 100,
+		py::arg("min_triangle_area") = 100,
+		py::arg("min_coverage") = 0.5,
 		py::arg("max_iters") = 400,
-		py::arg("minimum_point_number") = 2 * 3);
+		py::arg("min_point_number") = 2 * 3);
 
   return m.ptr();
 }
