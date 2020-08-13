@@ -11,13 +11,15 @@ py::tuple find6DPoses(
 	py::array_t<double>  x2y2z2_,
 	py::array_t<double>  K_,
 	double threshold,
+	int maximum_model_number,
 	double conf,
 	double spatial_coherence_weight,
 	double neighborhood_ball_radius,
 	double maximum_tanimoto_similarity,
+	double scaling_from_millimeters,
+	double minimum_triangle_size,
 	int max_iters,
-	int minimum_point_number,
-	int maximum_model_number) 
+	int minimum_point_number) 
 {
 	py::buffer_info buf1 = x1y1_.request();
 	size_t NUM_TENTS = buf1.shape[0];
@@ -75,6 +77,8 @@ py::tuple find6DPoses(
 		conf,
 		neighborhood_ball_radius,
 		maximum_tanimoto_similarity,
+		maximum_tanimoto_similarity,
+		scaling_from_millimeters,
 		max_iters,
 		minimum_point_number,
 		maximum_model_number);
@@ -283,13 +287,15 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("x2y2z2"),
 		py::arg("K"),
 		py::arg("threshold") = 4.0,
+		py::arg("maximum_model_number") = -1,
 		py::arg("conf") = 0.90,
 		py::arg("spatial_coherence_weight") = 0.1,
 		py::arg("neighborhood_ball_radius") = 20.0,
 		py::arg("maximum_tanimoto_similarity") = 0.9,
+		py::arg("scaling_from_millimeters") = 0.1,
+		py::arg("minimum_triangle_size") = 100,
 		py::arg("max_iters") = 400,
-		py::arg("minimum_point_number") = 2 * 3,
-		py::arg("maximum_model_number") = -1);
+		py::arg("minimum_point_number") = 2 * 3);
 
   return m.ptr();
 }
