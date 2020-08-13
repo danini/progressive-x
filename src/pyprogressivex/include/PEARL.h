@@ -248,7 +248,7 @@ namespace pearl
 		}
 
 		// Return a constant reference to the label container together with the distinct label number in it.
-		return std::make_pair<const std::vector<size_t> &, size_t>(point_to_instance_labeling, max_label);
+		return std::make_pair/*<const std::vector<size_t> &, size_t>*/(point_to_instance_labeling, max_label);
 	}
 
 	template<class _NeighborhoodGraph, // The type of neighborhood graph which is used in the spatial coherence term
