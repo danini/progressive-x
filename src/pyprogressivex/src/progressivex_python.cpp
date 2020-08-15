@@ -106,14 +106,8 @@ int find6DPoses_(
 	
 	// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
-	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
-	start = std::chrono::system_clock::now(); // The starting time of the neighborhood calculation
 	gcransac::neighborhood::FlannNeighborhoodGraph neighborhood(&points_for_neighborhood, // All data points
 		neighborhood_ball_radius); // The radius of the neighborhood ball for determining the neighborhoods.
-	end = std::chrono::system_clock::now(); // The end time of the neighborhood calculation
-	std::chrono::duration<double> elapsed_seconds = end - start; // The elapsed time in seconds
-
-	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
 
 	typedef estimator::PerspectiveNPointEstimator<estimator::solver::P3PSolver, // The solver used for fitting a model to a minimal sample
 		estimator::solver::EPnPLM> // The solver used for fitting a model to a non-minimal sample
@@ -142,9 +136,7 @@ int find6DPoses_(
 	// (ii) if the number of models is known and is greater than 1.
 	if (maximum_model_number == -1 ||
 		maximum_model_number > 1)
-	{
-		printf("Applying Progressive-X\n");
-		
+	{		
 		// Applying Progressive-X
 		progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 			gcransac::utils::DefaultPnPEstimator, // The type of the used model estimator
@@ -219,17 +211,16 @@ int find6DPoses_(
 		
 		return progressive_x.getModelNumber();
 	} else
-	{
-		printf("Applying Graph-Cut RANSAC\n");
-		
+	{		
 		GCRANSAC<PnPEstimator, neighborhood::FlannNeighborhoodGraph, EPOSScoringFunction<PnPEstimator>> gcransac;
+		gcransac.setFPS(-1); // Set the desired FPS (-1 means no limit)
 		gcransac.settings.threshold = normalized_threshold; // The inlier-outlier threshold
 		gcransac.settings.minimum_pixel_coverage = minimum_coverage;
 		gcransac.settings.spatial_coherence_weight = spatial_coherence_weight; // The weight of the spatial coherence term
 		gcransac.settings.confidence = confidence; // The required confidence in the results
 		gcransac.settings.max_local_optimization_number = 50; // The maximum number of local optimizations
 		gcransac.settings.max_iteration_number = max_iters; // The maximum number of iterations
-		gcransac.settings.min_iteration_number = 10; // The minimum number of iterations
+		gcransac.settings.min_iteration_number = 1; // The minimum number of iterations
 		gcransac.settings.neighborhood_sphere_radius = 8; // The radius of the neighborhood ball
 		gcransac.settings.core_number = 1; // The number of parallel processes
 		gcransac.settings.used_pixels = pixels.size();

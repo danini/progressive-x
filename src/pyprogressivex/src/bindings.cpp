@@ -78,9 +78,9 @@ py::tuple find6DPoses(
 		conf,
 		neighborhood_ball_radius,
 		max_tanimoto_similarity,
-		max_tanimoto_similarity,
 		scaling_from_millimeters,
 		min_coverage,
+		min_triangle_area,
 		max_iters,
 		min_point_number,
 		max_model_number);
