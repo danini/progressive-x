@@ -50,15 +50,7 @@ int find6DPoses_(
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
 	const int &maximum_model_number)
-{
-	// Initialize Google's logging library.
-	static bool isLoggingInitialized = false;
-	if (!isLoggingInitialized)
-	{
-		google::InitGoogleLogging("pyprogessivex");
-		isLoggingInitialized = true;
-	}
-	
+{	
 	// Calculate the inverse of the intrinsic camera parameters
 	Eigen::Matrix3d K;
 	K << intrinsicParams[0], intrinsicParams[1], intrinsicParams[2],
