@@ -2,7 +2,6 @@
 
 #include <math.h>
 #include <random>
-#include <iostream>
 #include <vector>
 
 #include <opencv2/core/core.hpp>
@@ -289,8 +288,7 @@ namespace pearl
 				changed_ = true;
 
 				if (verbose)
-					std:cout << "[Optimization] Instance " << instance_idx << 
-						" is rejected due to having too few inliers (" << inlier_number  << ").\n";
+					printf("[Optimization] Instance %d is rejected due to having too few inliers (%d)\n", instance_idx, inlier_number);
 			}
 		}
 
@@ -309,7 +307,7 @@ namespace pearl
 		if (alpha_expansion_engine == nullptr)
 		{
 			if (verbose)
-				std:cerr << "The alpha-expansion engine has not been initialized.\n";
+				fprintf(stderr, "The alpha-expansion engine has not been initialized.\n");
 			return;
 		}
 
@@ -403,7 +401,7 @@ namespace pearl
 			iteration_number++ < maximum_iteration_number) // Break when the maximum iteration limit has been exceeded.
 		{
 			if (verbose)
-				std:cout << "[Optimization] Iteration " << iteration_number << ".\n";
+				printf("[Optimization] Iteration %d.\n", iteration_number);
 
 			// A flag to decide if the previous labeling should be used as an initial one.
 			// It is true if it is not the first iteration and the number of models has not been changed. 
@@ -420,7 +418,7 @@ namespace pearl
 				energy); // The energy of the alpha-expansion
 
 			if (verbose)
-				std:cout << "[Optimization] The energy of the labeling is " << energy << ".\n";
+				printf("[Optimization] The energy of the labeling is %f.\n", energy);
 
 			// A flag to see if the model parameters changed.
 			// Initialize as if nothing has changed.
