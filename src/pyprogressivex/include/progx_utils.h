@@ -8,7 +8,6 @@
 #include <iterator>
 #include <set>
 
-#include <glog/logging.h>
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/imgproc.hpp>
@@ -39,9 +38,7 @@ bool loadPointsWithLabels(
 
 	if (!infile.is_open())
 	{
-		LOG(FATAL) <<
-			"A problem occured when loading the points from file \"" <<
-			file_ << "\", The file does not exist.";
+		fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_.c_str());
 		return false;
 	}
 
@@ -67,9 +64,7 @@ bool loadPointsWithLabels(
 		if (loaded_coordinates.size() > 0 &&
 			loaded_coordinates.back().size() != split_elements.size())
 		{
-			LOG(FATAL) <<
-				"A problem occured when loading the points from file \"" <<
-				file_ << "\". The number of coordinates vary in the rows.";
+			fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_.c_str());
 			return false;
 		}
 
@@ -96,8 +91,7 @@ bool loadPointsWithLabels(
 		reference_model_number_ = MAX(reference_model_number_, labels_[point_idx]);
 	}
 
-	LOG(INFO) << 
-		"Number of loaded correspondences = " << point_number;
+	printf("Number of loaded correspondences = %d\n", point_number);
 
 	return true;
 }
