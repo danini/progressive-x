@@ -116,7 +116,7 @@ namespace progx
 				window_width = static_cast<int>(window_height * static_cast<double>(image_.cols) / static_cast<double>(image_.rows));
 			}
 
-			cv::namedWindow(window_name_, cv::CV_WINDOW_NORMAL);
+			cv::namedWindow(window_name_, cv::WINDOW_NORMAL);
 			cv::resizeWindow(window_name_, window_width, window_height);
 			cv::imshow(window_name_, image_);
 			cv::waitKey(delay_);
