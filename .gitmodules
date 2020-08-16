@@ -1,6 +1,5 @@
 [submodule "graph-cut-ransac"]
 	path = graph-cut-ransac
-	depth = 1
 	url = https://github.com/danini/graph-cut-ransac.git
 	branch = version-epos
 
