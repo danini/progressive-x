@@ -25,8 +25,6 @@
 
 #include "progx_model.h"
 
-#include <glog/logging.h>
-
 namespace progx
 {
 	struct MultiModelSettings
@@ -130,6 +128,9 @@ namespace progx
 
 		// The model estimator which estimates the model parameters from a set of points
 		_ModelEstimator *model_estimator;
+		
+		// Verbose
+		bool verbose;
 
 		// The statistics of Progressive-X containing everything which the user might be curious about,
 		// e.g., processing time, results, etc.
@@ -177,7 +178,8 @@ namespace progx
 
 		ProgressiveX(ProgressVisualizer * const visualizer_ = nullptr) :
 			visualizer(visualizer_),
-			scoring_exponent(2)
+			scoring_exponent(2),
+			verbose(false)
 		{
 		}
 
@@ -248,8 +250,6 @@ namespace progx
 		_MainSampler &main_sampler_, // The sampler used in the main RANSAC loop of GC-RANSAC
 		_LocalOptimizerSampler &local_optimization_sampler_) // The sampler used in the local optimization of GC-RANSAC
 	{
-		LOG(INFO) << "Progressive-X is started...";
-
 		// Initializing the procedure
 		initialize(data_);
 
@@ -261,11 +261,15 @@ namespace progx
 		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
 		model_estimator = &model_estimator_;
 
-		LOG(INFO) << "The main iteration is started...";
+		if (verbose)
+			printf("The main iteration is started...\n");
 		for (size_t current_iteration = 0; current_iteration < 10; ++current_iteration)
 		{
-			LOG(INFO) << "-------------------------------------------";
-			LOG(INFO) << "Iteration " << current_iteration + 1 << ".";
+			if (verbose)
+			{			
+				printf("-------------------------------------------\n");
+				printf("Iteration %d.\n", current_iteration + 1);
+			}
 
 			// Statistics of the current iteration
 			IterationStatistics iteration_statistics;
@@ -307,25 +311,32 @@ namespace progx
 			number_of_ransac_iterations += 
 				proposal_engine_statistics.iteration_number;
 
-			LOG(INFO) << "A model proposed with " <<
-				proposal_engine_statistics.inliers.size() << " inliers\nin " <<
-				iteration_statistics.time_of_proposal_engine << " seconds (" << 
-				proposal_engine_statistics.iteration_number << " iterations).";
+			if (verbose)
+			{			
+				printf("A model proposed with %d inliers\nin %f seconds (%d iterations).\n",
+					proposal_engine_statistics.inliers.size(),
+					iteration_statistics.time_of_proposal_engine,
+					proposal_engine_statistics.iteration_number);
+			}
+				
 
 			/*************************************
 			*** Model instance validation step ***
 			*************************************/
-			LOG(INFO) << "Check if the model should be added to the compound instance.";
-
+			if (verbose)
+				printf("Check if the model should be added to the compound instance.\n");
+				
 			// The starting time of the model validation
 			start = std::chrono::system_clock::now();
 			if (!isPutativeModelValid(data_,
 				putative_model,
 				proposal_engine_statistics))
 			{
-				LOG(INFO) << "The model is not accepted to be added to the compound instances." <<
-					" The number of consecutively rejected proposals is " << unaccepted_putative_instances <<
-					" (< " << settings.max_proposal_number_without_change << ")";
+				if (verbose)	
+					printf("The model is not accepted to be added to the compound instances. The number of consecutively rejected proposals is %d (< %d)\n",
+						unaccepted_putative_instances,
+						settings.max_proposal_number_without_change);
+					
 				++unaccepted_putative_instances;
 				if (unaccepted_putative_instances == settings.max_proposal_number_without_change)
 					break;
@@ -342,8 +353,8 @@ namespace progx
 			iteration_statistics.time_of_model_validation =
 				elapsed_seconds.count();
 
-			LOG(INFO) << "The model has been accepted in " <<
-				iteration_statistics.time_of_model_validation << " seconds.";
+			if (verbose)	
+				printf("The model has been accepted in %f seconds.\n", iteration_statistics.time_of_model_validation);
 
 			/******************************************
 			*** Compound instance optimization step ***
@@ -357,7 +368,8 @@ namespace progx
 			// If only a single model instance is known, use the inliers of GC-RANSAC
 			// to initialize the labeling.
 
-			LOG(INFO) << "Model optimization started...";
+			if (verbose)	
+				printf("Model optimization started...\n");
 			if (models.size() == 1)
 			{
 				// Store the inliers of the current model to the statistics object
@@ -381,9 +393,10 @@ namespace progx
 				size_t model_number = 0;
 				model_optimizer->getLabeling(statistics.labeling, model_number);
 
-				if (model_number != models.size())
+				if (verbose && 
+					model_number != models.size())
 				{
-					LOG(INFO) << "Models have been removed during the optimization.\n";
+					printf("Models have been removed during the optimization.\n");
 				}
 			}
 
@@ -397,8 +410,8 @@ namespace progx
 			iteration_statistics.time_of_optimization =
 				elapsed_seconds.count();
 
-			LOG(INFO) << "Model optimization finished in " <<
-				iteration_statistics.time_of_optimization << " seconds.";
+			if (verbose)
+				printf("Model optimization finished in %f seconds.\n", iteration_statistics.time_of_optimization);
 
 			// The starting time of the model validation
 			start = std::chrono::system_clock::now();
@@ -416,8 +429,8 @@ namespace progx
 			iteration_statistics.time_of_compound_model_update =
 				elapsed_seconds.count();
 
-			LOG(INFO) << "Compound instance is updated in " <<
-				iteration_statistics.time_of_compound_model_update << " seconds.";
+			if (verbose)
+				printf("Compound instance is updated in %f seconds.\n", iteration_statistics.time_of_compound_model_update);
 
 			// Store the instance number in the iteration's statistics
 			iteration_statistics.number_of_instances = models.size();
@@ -442,8 +455,8 @@ namespace progx
 			// Add the current iteration's statistics to the statistics object
 			statistics.addIterationStatistics(iteration_statistics);
 
-			LOG(INFO) << "The predicted number of inliers (with confidence " << settings.confidence <<
-				")\nnot covered by the compound instance is " << unseen_inliers << ".";
+			if (verbose)
+				printf("The predicted number of inliers (with confidence %f)\nnot covered by the compound instance is %d.", settings.confidence, unseen_inliers);
 
 			// If it is likely, that there are fewer inliers in the data than the minimum number,
 			// terminate.

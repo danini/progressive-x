@@ -30,7 +30,6 @@
 #include <sys/stat.h>
 
 #include <mutex>
-#include <glog/logging.h>
 
 using namespace gcransac;
 
@@ -462,15 +461,7 @@ int findTwoViewMotions_(
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
 	const int &maximum_model_number)
-{
-	// Initialize Google's logging library.
-	static bool isLoggingInitialized = false;
-	if (!isLoggingInitialized)
-	{
-		google::InitGoogleLogging("pyprogessivex");
-		isLoggingInitialized = true;
-	}
-	
+{	
 	const size_t num_tents = sourcePoints.size() / 2;
 	
 	double max_x = std::numeric_limits<double>::min(),

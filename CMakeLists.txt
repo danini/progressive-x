@@ -8,12 +8,6 @@ option(USE_OPENMP "Use OPENMP" ON)
 # indicate if the sample project should be included
 option(CREATE_SAMPLE_PROJECT "Create the Sample Project" ON)
 
-# indicate if GFLags should be enabled
-option(USE_GFLAGS "Enable Google Flags." ON)
-
-# indicate if GLog should be enabled
-option(USE_GLOG "Enable Google Log." ON)
-
 SET (CMAKE_BUILD_TYPE "RELEASE")
 
 IF(CMAKE_COMPILER_IS_GNUCXX)
@@ -47,55 +41,6 @@ find_package(Eigen3 REQUIRED)
 set(EIGEN_INCLUDE_DIRS ${EIGEN3_INCLUDE_DIR})
 
 # ==============================================================================
-# Find GFlags
-# ==============================================================================
-find_package(gflags REQUIRED)
-if(DEFINED gflags_VERSION_STRING OR DEFINED GFLAGS_VERSION_STRING)
-        # different cmake variable with lower or upper case exist
-        set(GFLAGS_INCLUDE_DIR ${GFLAGS_INCLUDE_DIR})
-        #set(GFLAGS_INCLUDE_DIR ${GFLAGS_INCLUDE_DIR} ${gflags_INCLUDE_DIR})
-        set(GFLAGS_LIBRARIES ${GFLAGS_LIBRARIES})
-        #set(GFLAGS_LIBRARIES ${GFLAGS_LIBRARIES} ${gflags_LIBRARIES})
-  message( "Found Gflags ${GFLAGS_VERSION_STRING}" )
-  message( STATUS "> GFLAGS_INCLUDE_DIR:   ${GFLAGS_INCLUDE_DIR}" )
-  message( STATUS "> GFLAGS_LIBRARIES:   ${GFLAGS_LIBRARIES}" )
-endif()
-
-# ==============================================================================
-# Find GLOG
-# ==============================================================================
-#include(FindPackageHandleStandardArgs)
-#
-#set(GLOG_ROOT_DIR "" CACHE PATH "Folder contains Google glog")
-# 
-#find_path(GLOG_INCLUDE_DIR glog/logging.h
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        src)
-# 
-#find_library(GLOG_LIBRARY glog libglog
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        .libs
-#        lib
-#        lib64)
-# 
-#find_package_handle_standard_args(GLOG DEFAULT_MSG
-#    GLOG_INCLUDE_DIR GLOG_LIBRARY)
-# 
-#if(GLOG_FOUND)
-#    set(GLOG_INCLUDE_DIRS ${GLOG_INCLUDE_DIR})
-#    set(GLOG_LIBRARIES ${GLOG_LIBRARY})
-#endif()
-#
-find_package(glog REQUIRED)
-if(NOT glog_FOUND)
-	message(FATAL_ERROR "Glog not found.")
-endif()
-
-# ==============================================================================
 # Find OpenMP
 # ==============================================================================
 find_package(OpenMP)
@@ -114,7 +59,6 @@ SET(SOURCE_DIR "src/pyprogressivex")
 
 include_directories (
 	${PROJECT_SOURCE_DIR}/graph-cut-ransac/src/pygcransac/include
-	${GLOG_INCLUDE_DIR}
 )
 
 # ==============================================================================
@@ -166,8 +110,6 @@ pybind11_add_module(pyprogressivex ${SOURCE_DIR}/src/bindings.cpp ${SOURCE_DIR}/
 target_link_libraries(pyprogressivex PRIVATE  
 	${OpenCV_LIBS} 
 	Eigen3::Eigen 
-	glog::glog 
-	gflags
 	GraphCutRANSAC)
 
 add_library(${PROJECT_NAME} STATIC
@@ -180,8 +122,6 @@ add_library(${PROJECT_NAME} STATIC
 target_link_libraries (${PROJECT_NAME}
 	${OpenCV_LIBS}
 	Eigen3::Eigen
-	glog::glog
-	gflags
 	GraphCutRANSAC)
 	
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -199,8 +139,6 @@ if (CREATE_SAMPLE_PROJECT)
 		${OpenCV_LIBS}
 		${PROJECT_NAME}
 		Eigen3::Eigen
-		gflags
-		glog::glog
 		GraphCutRANSAC
 	)
 
