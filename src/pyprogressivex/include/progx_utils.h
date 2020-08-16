@@ -38,7 +38,7 @@ bool loadPointsWithLabels(
 
 	if (!infile.is_open())
 	{
-		fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_.c_str());
+		fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_);
 		return false;
 	}
 
@@ -64,7 +64,7 @@ bool loadPointsWithLabels(
 		if (loaded_coordinates.size() > 0 &&
 			loaded_coordinates.back().size() != split_elements.size())
 		{
-			fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_.c_str());
+			fprintf(stderr, "A problem occured when loading the points from file \"%s\". The number of coordinates vary in the rows.", file_);
 			return false;
 		}
 
