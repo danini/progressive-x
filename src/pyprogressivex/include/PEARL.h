@@ -2,6 +2,7 @@
 
 #include <math.h>
 #include <random>
+#include <iostream>
 #include <vector>
 
 #include <opencv2/core/core.hpp>
