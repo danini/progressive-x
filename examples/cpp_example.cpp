@@ -18,7 +18,6 @@
 #include "essential_estimator.h"
 
 #include "progressive_x.h"
-#include "progress_visualizer.h"
 
 #include <ctime>
 
