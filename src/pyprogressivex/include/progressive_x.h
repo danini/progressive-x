@@ -5,7 +5,7 @@
 #include <random>
 #include <vector>
 
-#include "pearl.h"
+#include "PEARL.h"
 #include "GCRANSAC.h"
 #include "types.h"
 #include "scoring_function_with_compound_model.h"
