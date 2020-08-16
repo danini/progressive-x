@@ -74,7 +74,7 @@ file(GLOB_RECURSE SRCS_GraphCutRANSAC
 	"graph-cut-ransac/src/pygcransac/include/*.cpp"
 )
 
-add_library(GraphCutRANSAC STATIC
+add_library(GraphCutRANSAC SHARED
 	${HDRS_GraphCutRANSAC}
 	${SRCS_GraphCutRANSAC}
 )
@@ -116,8 +116,6 @@ add_library(${PROJECT_NAME} STATIC
 	${HDRS_PROGRESSIVEX}
 	${SRCS_PROGRESSIVEX}
 )
-
-# SET_TARGET_PROPERTIES(${PROJECT_NAME} PROPERTIES LINKER_LANGUAGE CXX)
 
 target_link_libraries (${PROJECT_NAME}
 	${OpenCV_LIBS}
