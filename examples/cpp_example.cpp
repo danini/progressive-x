@@ -21,9 +21,12 @@
 #include "progress_visualizer.h"
 
 #include <ctime>
-#include <direct.h>
-#include <sys/types.h>
-#include <sys/stat.h>
+
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+	#include <direct.h>
+	#include <sys/types.h>
+	#include <sys/stat.h>
+#endif
 
 #include <mutex>
 #include <glog/logging.h>
