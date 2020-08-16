@@ -148,12 +148,16 @@ void testMulti6DPoseFitting(
 	gcransac::utils::loadPointsFromFile<12>(ground_truth_poses, ground_truth_path_.c_str());
 
 	// Normalize the correspondences by the intrinsic camera matrices
-	cv::Mat normalized_points(points.rows, 7, CV_64F);
+	cv::Mat normalized_image_points(points.rows, 2, CV_64F);
 	gcransac::utils::normalizeImagePoints(
 		points(cv::Rect(0, 0, 2, points.rows)),
 		intrinsics,
-		normalized_points(cv::Rect(0, 0, 2, points.rows)));
+		normalized_image_points);
 
+	cv::Mat normalized_points(points.rows, 7, CV_64F);
+	
+	// Copy the normalized 2D points to the last columns. 
+	normalized_image_points.copyTo(normalized_points(cv::Rect(0, 0, 2, points.rows)));
 	// Copy the original 2D points to the last columns. They will be used for degeneracy testing
 	points(cv::Rect(0, 0, 2, points.rows)).copyTo(normalized_points(cv::Rect(5, 0, 2, points.rows)));
 	// Copy the 3D points to the matrix
@@ -205,9 +209,11 @@ void testMulti6DPoseFitting(
 	// The maximum iteration number of GC-RANSAC
 	settings.proposal_engine_settings.max_iteration_number = 1000;
 
+	gcransac::utils::DefaultPnPEstimator estimator;
+
 	progressive_x.run(normalized_points, // All data points
 		neighborhood, // The neighborhood graph
-		gcransac::utils::DefaultPnPEstimator(), // The used estimator
+		estimator, // The used estimator
 		main_sampler, // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 	
