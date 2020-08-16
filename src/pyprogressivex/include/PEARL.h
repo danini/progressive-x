@@ -6,7 +6,6 @@
 
 #include <opencv2/core/core.hpp>
 #include <Eigen/Eigen>
-#include <glog/logging.h>
 
 #include "GCoptimization.h"
 #include "progx_model.h"
@@ -140,7 +139,8 @@ namespace pearl
 			spatial_coherence_weight(spatial_coherence_weight_),
 			model_complexity_weight(minimum_inlier_number_),
 			minimum_inlier_number(minimum_inlier_number_),
-			alpha_expansion_engine(nullptr)
+			alpha_expansion_engine(nullptr),
+			verbose(false)
 		{
 		}
 
@@ -176,6 +176,7 @@ namespace pearl
 		std::vector<size_t> point_to_instance_labeling;
 		std::vector<std::vector<size_t>> points_per_instance;
 		std::vector<size_t> outliers;
+		bool verbose;
 
 		bool labeling(const cv::Mat &data_, // All data points
 			const std::vector<progx::Model<_ModelEstimator>> *models_, // The models instances stored
@@ -286,8 +287,9 @@ namespace pearl
 				// the labeling should be applied again.
 				changed_ = true;
 
-				LOG(INFO) << "[Optimization] Instance " << instance_idx << 
-					" is rejected due to having too few inliers (" << inlier_number  << ").";
+				if (verbose)
+					std:cout << "[Optimization] Instance " << instance_idx << 
+						" is rejected due to having too few inliers (" << inlier_number  << ").\n";
 			}
 		}
 
@@ -305,7 +307,8 @@ namespace pearl
 		// If the alpha-expansion engine has not been initialized, return.
 		if (alpha_expansion_engine == nullptr)
 		{
-			LOG(WARNING) << "The alpha-expansion engine has not been initialized.";
+			if (verbose)
+				std:cerr << "The alpha-expansion engine has not been initialized.\n";
 			return;
 		}
 
@@ -398,7 +401,8 @@ namespace pearl
 		while (!convergenve && // Break when the results converged.
 			iteration_number++ < maximum_iteration_number) // Break when the maximum iteration limit has been exceeded.
 		{
-			LOG(INFO) << "[Optimization] Iteration " << iteration_number << ".";
+			if (verbose)
+				std:cout << "[Optimization] Iteration " << iteration_number << ".\n";
 
 			// A flag to decide if the previous labeling should be used as an initial one.
 			// It is true if it is not the first iteration and the number of models has not been changed. 
@@ -414,7 +418,8 @@ namespace pearl
 				initialize_with_previous_labeling, // A flag to decide if the previous labeling should be used as an initial one.
 				energy); // The energy of the alpha-expansion
 
-			LOG(INFO) << "[Optimization] The energy of the labeling is " << energy << ".";
+			if (verbose)
+				std:cout << "[Optimization] The energy of the labeling is " << energy << ".\n";
 
 			// A flag to see if the model parameters changed.
 			// Initialize as if nothing has changed.
