@@ -35,9 +35,12 @@ namespace progx
 		size_t minimum_number_of_inliers,
 			max_proposal_number_without_change,
 			cell_number_in_neighborhood_graph,
-			maximum_model_number;
+			maximum_model_number_to_optimize;
+
+		int maximum_model_number;
 
 		double maximum_tanimoto_similarity,
+			proposal_engine_confidence,
 			minimum_triangle_size,
 			confidence, // Required confidence in the result
 			one_minus_confidence, // 1 - confidence
@@ -59,7 +62,9 @@ namespace progx
 			spatial_coherence_weight(0.14),
 			inlier_outlier_threshold(2.0),
 			confidence(0.95),
+			proposal_engine_confidence(1.0),
 			one_minus_confidence(0.05),
+			maximum_model_number_to_optimize(std::numeric_limits<size_t>::max()),
 			maximum_model_number(std::numeric_limits<size_t>::max())
 		{
 			proposal_engine_settings.neighborhood_sphere_radius = cell_number_in_neighborhood_graph;
@@ -89,6 +94,7 @@ namespace progx
 			total_time_of_compound_model_calculation;
 		std::vector<std::vector<size_t>> inliers_of_each_model;
 		std::vector<size_t> labeling;
+		std::vector<double> scores;
 		std::vector<IterationStatistics> iteration_statistics;
 
 		void addIterationStatistics(IterationStatistics iteration_statistics_)
@@ -131,7 +137,7 @@ namespace progx
 		
 		// Verbose
 		bool verbose;
-
+	
 		// The statistics of Progressive-X containing everything which the user might be curious about,
 		// e.g., processing time, results, etc.
 		MultiModelStatistics statistics;
@@ -174,6 +180,13 @@ namespace progx
 			const size_t iteration_number_, // The current number of RANSAC iterations
 			const size_t inlier_number_of_compound_model_); // The number of inliers of the compound model instance
 
+		// The function applying Progressive-X to a set of data points
+		void spedUpFitting(const cv::Mat &data_, // All data points
+			const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+			_ModelEstimator &model_estimator_, // The used model estimator
+			_MainSampler &main_sampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+			_LocalOptimizerSampler &local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
+
 	public:
 
 		ProgressiveX(ProgressVisualizer * const visualizer_ = nullptr) :
@@ -193,6 +206,11 @@ namespace progx
 		void setScoringExponent(const double &scoring_exponent_)
 		{
 			scoring_exponent = scoring_exponent_;
+		}
+
+		void log(bool do_logging_)
+		{
+			verbose = do_logging_;
 		}
 
 		// Returns a constant reference to the settings of the multi-model fitting
@@ -239,6 +257,137 @@ namespace progx
 		}
 	};
 
+
+	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
+		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
+		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
+		class _LocalOptimizerSampler> // The sampler used in the local optimization of GC-RANSAC
+		void ProgressiveX<_NeighborhoodGraph, _ModelEstimator, _MainSampler, _LocalOptimizerSampler>::spedUpFitting(
+			const cv::Mat &data_, // All data points
+			const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
+			_ModelEstimator &model_estimator_,
+			_MainSampler &main_sampler_, // The sampler used in the main RANSAC loop of GC-RANSAC
+			_LocalOptimizerSampler &local_optimization_sampler_) // The sampler used in the local optimization of GC-RANSAC
+	{
+		size_t number_of_ransac_iterations = 0; 
+		cv::Mat current_data = data_.clone();
+		std::vector<size_t> indices(data_.rows);
+		for (size_t i = 0; i < data_.rows; ++i)
+			indices[i] = i;
+		std::chrono::time_point<std::chrono::system_clock> start, end, // Variables for time measurement
+			main_start = std::chrono::system_clock::now(), main_end;
+
+		for (size_t current_iteration = 0; current_iteration < settings.maximum_model_number; ++current_iteration)
+		{
+			// Initializing the proposal engine, i.e., Graph-Cut RANSAC
+			gcransac::GCRANSAC <_ModelEstimator, _NeighborhoodGraph, gcransac::EPOSScoringFunction<_ModelEstimator>>
+				local_proposal_engine;
+			
+			// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
+			// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
+			gcransac::neighborhood::FlannNeighborhoodGraph neighborhood(&current_data, // All data points
+				20.0); // The radius of the neighborhood ball for determining the neighborhoods.
+
+			local_proposal_engine.settings = settings.proposal_engine_settings;
+			local_proposal_engine.settings.confidence = 1.0;
+			local_proposal_engine.settings.threshold = settings.inlier_outlier_threshold;
+			local_proposal_engine.settings.spatial_coherence_weight = settings.spatial_coherence_weight;
+
+			if (verbose)
+			{
+				printf("-------------------------------------------\n");
+				printf("Iteration %d.\n", current_iteration + 1);
+			}
+
+			// Statistics of the current iteration
+			IterationStatistics iteration_statistics;
+
+			/***********************************
+			*** Model instance proposal step ***
+			***********************************/
+			// The putative model proposed by the proposal engine
+			progx::Model<_ModelEstimator> putative_model;
+
+			// Reset the samplers
+			gcransac::sampler::ProsacSampler main_sampler(&current_data, // The data points
+				_ModelEstimator::sampleSize()); // The size of a minimal sample
+			//_MainSampler main_sampler(&current_data);
+			_LocalOptimizerSampler local_optimization_sampler(&current_data);
+						
+			// Applying the proposal engine to get a new putative model
+			local_proposal_engine.run(current_data, // The data points
+				*model_estimator, // The model estimator to be used
+				&main_sampler, // The sampler used for the main RANSAC loop
+				&local_optimization_sampler, // The sampler used for the local optimization
+				&neighborhood, // The neighborhood graph
+				putative_model);
+
+			if (putative_model.descriptor.rows() == 0 ||
+				putative_model.descriptor.cols() == 0)
+				continue;
+
+			// Add the putative instance to the compound one
+			models.emplace_back(putative_model);
+
+			// Get the RANSAC statistics to know the inliers of the proposal
+			const gcransac::utils::RANSACStatistics &proposal_engine_statistics =
+				local_proposal_engine.getRansacStatistics();
+
+			// Update the current iteration's statistics
+			iteration_statistics.time_of_proposal_engine =
+				proposal_engine_statistics.processing_time;
+
+			// Increase the total number of RANSAC iterations
+			number_of_ransac_iterations +=
+				proposal_engine_statistics.iteration_number;
+
+			if (verbose)
+			{
+				printf("A model proposed with %d inliers in %f seconds (%d iterations).\n",
+					proposal_engine_statistics.inliers.size(),
+					iteration_statistics.time_of_proposal_engine,
+					proposal_engine_statistics.iteration_number);
+			}
+
+			if (proposal_engine_statistics.inliers.size() < settings.minimum_number_of_inliers)
+				continue;
+
+			/******************************************
+			*** Remove the putative model's inliers ***
+			******************************************/
+			std::vector<bool> mask(current_data.rows, 0);
+			statistics.inliers_of_each_model.emplace_back(std::vector<size_t>());
+			for (const size_t &inlier_idx : proposal_engine_statistics.inliers)
+			{
+				mask[inlier_idx] = 1;
+				statistics.inliers_of_each_model.back().emplace_back(indices[inlier_idx]);
+			}
+
+			cv::Mat temp_data = current_data.clone();
+			std::vector<size_t> old_indices = indices;
+			indices.resize(0);
+			current_data = cv::Mat(current_data.rows - proposal_engine_statistics.inliers.size(), current_data.cols, CV_64F);
+			size_t current_row = 0;
+			for (size_t r = 0; r < mask.size(); ++r)
+			{
+				if (!mask[r])
+				{
+					temp_data.row(r).copyTo(current_data.row(current_row));
+					indices.emplace_back(old_indices[r]);
+					++current_row;
+				}
+			}
+		}
+
+		main_end = std::chrono::system_clock::now();
+
+		// The elapsed time in seconds
+		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
+		elapsed_seconds = main_end - main_start;
+
+		statistics.processing_time = elapsed_seconds.count();
+	}
+
 	template<class _NeighborhoodGraph, // The type of the used neighborhood graph
 		class _ModelEstimator, // The model estimator used for estimating the instance parameters from a set of points
 		class _MainSampler, // The sampler used in the main RANSAC loop of GC-RANSAC
@@ -263,12 +412,26 @@ namespace progx
 
 		if (verbose)
 			printf("The main iteration is started...\n");
-		for (size_t current_iteration = 0; current_iteration < 10; ++current_iteration)
+
+		if (settings.maximum_model_number_to_optimize < settings.maximum_model_number)
+		{
+			spedUpFitting(data_,
+				neighborhood_graph_,
+				model_estimator_,
+				main_sampler_,
+				local_optimization_sampler_);
+			return;
+		}
+
+		for (size_t current_iteration = 0; current_iteration < settings.maximum_model_number < 0 ? 20 : 2 * settings.maximum_model_number; ++current_iteration)
 		{
 			if (verbose)
 			{			
 				printf("-------------------------------------------\n");
 				printf("Iteration %d.\n", current_iteration + 1);
+
+				if (current_iteration > 100)
+					break;
 			}
 
 			// Statistics of the current iteration
@@ -524,6 +687,7 @@ namespace progx
 				settings.inlier_outlier_threshold,
 				settings.spatial_coherence_weight,
 				settings.minimum_number_of_inliers);
+		model_optimizer->log(verbose);
 		
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
@@ -532,7 +696,7 @@ namespace progx
 
 		gcransac::utils::Settings &proposal_engine_settings = proposal_engine->settings;
 		proposal_engine_settings = settings.proposal_engine_settings;
-		proposal_engine_settings.confidence = settings.confidence;
+		proposal_engine_settings.confidence = settings.proposal_engine_confidence;
 		proposal_engine_settings.threshold = settings.inlier_outlier_threshold;
 		proposal_engine_settings.spatial_coherence_weight = settings.spatial_coherence_weight;
 
@@ -595,10 +759,17 @@ namespace progx
 		// Reset the preference vector of the compound instance
 		compound_preference_vector.setConstant(0);
 
+		// Updating the score
+		statistics.scores.resize(models.size());
+
 		// Iterate through all instances in the compound one and 
 		// update the preference values
+		size_t model_idx = 0;
 		for (auto &model : models)
 		{
+			// Initialize the score
+			statistics.scores[model_idx] = 0.0;
+
 			// Iterate through all points and estimate the preference values
 			double squared_residual;
 			for (size_t point_idx = 0; point_idx < point_number; ++point_idx)
@@ -611,7 +782,12 @@ namespace progx
 				// the implied preference is the highest amongst the stored model instances. 
 				compound_preference_vector(point_idx) =
 					MAX(compound_preference_vector(point_idx), model.preference_vector(point_idx));
+
+				// Updating the score
+				statistics.scores[model_idx] +=
+					model.preference_vector(point_idx);
 			}
+			++model_idx;
 		}
 	}
 }
