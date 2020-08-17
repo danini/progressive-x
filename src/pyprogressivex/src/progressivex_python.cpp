@@ -39,9 +39,11 @@ int find6DPoses_(
 	const std::vector<double>& intrinsicParams,
 	std::vector<size_t>& labeling,
 	std::vector<double>& poses,
+	std::vector<double>& scores,
 	const double &spatial_coherence_weight,
 	const double &threshold,
 	const double &confidence,
+	const double &proposal_engine_confidence,
 	const double &neighborhood_ball_radius,
 	const double &maximum_tanimoto_similarity,
 	const double &scaling_from_millimeters,
@@ -49,7 +51,9 @@ int find6DPoses_(
 	const double &minimum_triangle_size,
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
-	const int &maximum_model_number)
+	const int &maximum_model_number,
+	const bool &apply_numerical_optimization,
+	const bool &log)
 {	
 	// Calculate the inverse of the intrinsic camera parameters
 	Eigen::Matrix3d K;
@@ -65,7 +69,7 @@ int find6DPoses_(
 	cv::Mat points(num_tents, 7, CV_64F);
 	cv::Mat points_for_neighborhood(points.rows, 5, CV_64F); // The matrix containing the data from which the neighborhoods are calculated
 	std::map<std::pair<int, int>, int> pixels; // A helper variable to count how many pixels are occupied
-
+	
 	for (size_t i = 0; i < num_tents; ++i) {		
 		points.at<double>(i, 5) = imagePoints[2 * i];
 		points.at<double>(i, 6) = imagePoints[2 * i + 1];
@@ -75,7 +79,7 @@ int find6DPoses_(
 			
 		vec(0) = points.at<double>(i, 5);
 		vec(1) = points.at<double>(i, 6);
-		
+
 		points.at<double>(i, 0) = Kinv.row(0) * vec;
 		points.at<double>(i, 1) = Kinv.row(1) * vec;
 		
@@ -85,11 +89,14 @@ int find6DPoses_(
 		points_for_neighborhood.at<double>(i, 3) = points.at<double>(i, 3) * scaling_from_millimeters;
 		points_for_neighborhood.at<double>(i, 4) = points.at<double>(i, 4) * scaling_from_millimeters;
 
+		points_for_neighborhood.at<double>(i, 0) = points.at<double>(i, 5);
+		points_for_neighborhood.at<double>(i, 1) = points.at<double>(i, 6);
+
 		const int x = points.at<double>(i, 5),
 			y = points.at<double>(i, 6);
-		pixels[std::make_pair(x, y)] = 1;
+		pixels[std::make_pair(x, y)] = 1;	
 	}
-	
+
 	// Normalize the threshold
 	const double f = 0.5 * (K(0,0) + K(1,1));
 	const double normalized_threshold =
@@ -108,8 +115,10 @@ int find6DPoses_(
 	PnPEstimator estimator(minimum_triangle_size);
 	gcransac::Pose6D model;
 
+	// Initialize the samplers
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::UniformSampler main_sampler(&points);
+	gcransac::sampler::ProsacSampler main_sampler(&points, estimator.sampleSize());
+	//gcransac::sampler::UniformSampler main_sampler(&points);
 
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -131,7 +140,7 @@ int find6DPoses_(
 		// Applying Progressive-X
 		progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 			gcransac::utils::DefaultPnPEstimator, // The type of the used model estimator
-			gcransac::sampler::UniformSampler, // The type of the used main sampler in GC-RANSAC
+			gcransac::sampler::ProsacSampler, // The type of the used main sampler in GC-RANSAC
 			gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 			progressive_x(nullptr);
 
@@ -160,7 +169,7 @@ int find6DPoses_(
 		// The required confidence in the results
 		settings.proposal_engine_settings.confidence = confidence; 
 		// The maximum number of local optimizations
-		settings.proposal_engine_settings.max_local_optimization_number = 50;
+		settings.proposal_engine_settings.max_local_optimization_number = 20;
 		// The maximum number of iterations
 		settings.proposal_engine_settings.max_iteration_number = max_iters; 
 		// The minimum number of iterations
@@ -172,6 +181,8 @@ int find6DPoses_(
 		if (maximum_model_number > 0)
 			settings.maximum_model_number = maximum_model_number;
 
+		progressive_x.log(log);
+
 		progressive_x.run(points, // All data points
 			neighborhood, // The neighborhood graph
 			estimator, // The used model estimator
@@ -181,7 +192,7 @@ int find6DPoses_(
 		// The obtained labeling
 		labeling = progressive_x.getStatistics().labeling;
 		poses.reserve(12 * progressive_x.getModelNumber());
-		
+	
 		// Saving the homography parameters
 		for (size_t model_idx = 0; model_idx < progressive_x.getModelNumber(); ++model_idx)
 		{
@@ -198,6 +209,8 @@ int find6DPoses_(
 			poses.emplace_back(model.descriptor(2, 1));
 			poses.emplace_back(model.descriptor(2, 2));
 			poses.emplace_back(model.descriptor(2, 3));
+
+			scores.emplace_back(progressive_x.getStatistics().scores[model_idx]);
 		}
 		
 		return progressive_x.getModelNumber();
@@ -209,7 +222,7 @@ int find6DPoses_(
 		gcransac.settings.minimum_pixel_coverage = minimum_coverage;
 		gcransac.settings.spatial_coherence_weight = spatial_coherence_weight; // The weight of the spatial coherence term
 		gcransac.settings.confidence = confidence; // The required confidence in the results
-		gcransac.settings.max_local_optimization_number = 50; // The maximum number of local optimizations
+		gcransac.settings.max_local_optimization_number = 20; // The maximum number of local optimizations
 		gcransac.settings.max_iteration_number = max_iters; // The maximum number of iterations
 		gcransac.settings.min_iteration_number = 1; // The minimum number of iterations
 		gcransac.settings.neighborhood_sphere_radius = 8; // The radius of the neighborhood ball
@@ -227,9 +240,12 @@ int find6DPoses_(
 		const utils::RANSACStatistics &statistics = gcransac.getRansacStatistics();
 		const size_t inlier_number = statistics.inliers.size();
 
+		scores.emplace_back(statistics.score);
+
 		// If numerical optimization is needed, apply the Levenberg-Marquardt 
 		// implementation of OpenCV.
-		if (inlier_number >= 6)
+		if (apply_numerical_optimization && 
+			inlier_number >= 6)
 		{
 			// The estimated rotation matrix
 			Eigen::Matrix3d rotation =

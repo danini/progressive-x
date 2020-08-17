@@ -13,6 +13,7 @@ py::tuple find6DPoses(
 	double threshold,
 	int max_model_number,
 	double conf,
+	double proposal_engine_conf,
 	double spatial_coherence_weight,
 	double neighborhood_ball_radius,
 	double max_tanimoto_similarity,
@@ -20,7 +21,9 @@ py::tuple find6DPoses(
 	double min_triangle_area,
 	double min_coverage,
 	int max_iters,
-	int min_point_number) 
+	int min_point_number,
+	bool apply_numerical_optimization,
+	bool log) 
 {
 	py::buffer_info buf1 = x1y1_.request();
 	size_t NUM_TENTS = buf1.shape[0];
@@ -63,8 +66,9 @@ py::tuple find6DPoses(
 	double *ptr1K = (double *)buf1K.ptr;
 	std::vector<double> K;
 	K.assign(ptr1K, ptr1K + buf1K.size);
-	
+
 	std::vector<double> poses;
+	std::vector<double> scores;
 	std::vector<size_t> labeling(NUM_TENTS);
 
 	int num_models = find6DPoses_(
@@ -73,9 +77,11 @@ py::tuple find6DPoses(
 		K,
 		labeling,
 		poses,
+		scores,
 		spatial_coherence_weight,
 		threshold,
 		conf,
+		proposal_engine_conf,
 		neighborhood_ball_radius,
 		max_tanimoto_similarity,
 		scaling_from_millimeters,
@@ -83,7 +89,15 @@ py::tuple find6DPoses(
 		min_triangle_area,
 		max_iters,
 		min_point_number,
-		max_model_number);
+		max_model_number,
+		apply_numerical_optimization,
+		log);
+
+	py::array_t<double> scores_ = py::array_t<double>(num_models);
+	py::buffer_info buf4 = scores_.request();
+	double *ptr4 = (double *)buf4.ptr;
+	for (size_t i = 0; i < num_models; i++)
+		ptr4[i] = static_cast<double>(scores[i]);
 
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
 	py::buffer_info buf3 = labeling_.request();
@@ -96,7 +110,7 @@ py::tuple find6DPoses(
 	double *ptr2 = (double *)buf2.ptr;
 	for (size_t i = 0; i < 12 * num_models; i++)
 		ptr2[i] = poses[i];
-	return py::make_tuple(poses_, labeling_);
+	return py::make_tuple(poses_, labeling_, scores_);
 }
 
 PYBIND11_PLUGIN(pyprogressivex) {
@@ -118,7 +132,8 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("K"),
 		py::arg("threshold") = 4.0,
 		py::arg("max_model_number") = -1,
-		py::arg("conf") = 0.90,
+		py::arg("conf") = 0.50,
+		py::arg("proposal_engine_conf") = 1.00,
 		py::arg("spatial_coherence_weight") = 0.1,
 		py::arg("neighborhood_ball_radius") = 20.0,
 		py::arg("max_tanimoto_similarity") = 0.9,
@@ -126,7 +141,9 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("min_triangle_area") = 100,
 		py::arg("min_coverage") = 0.5,
 		py::arg("max_iters") = 400,
-		py::arg("min_point_number") = 2 * 3);
+		py::arg("min_point_number") = 2 * 3,
+		py::arg("apply_numerical_optimization") = true,
+		py::arg("log") = false);
 
   return m.ptr();
 }

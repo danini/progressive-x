@@ -144,6 +144,11 @@ namespace pearl
 		{
 		}
 
+		void log(bool do_logging_)
+		{
+			verbose = do_logging_;
+		}
+
 		bool run(const cv::Mat &data_,
 			const _NeighborhoodGraph *neighborhood_graph_,
 			_ModelEstimator *model_estimator_,
