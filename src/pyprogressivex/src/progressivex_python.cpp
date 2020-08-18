@@ -117,7 +117,7 @@ int find6DPoses_(
 
 	// Initialize the samplers
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProsacSampler main_sampler(&points, estimator.sampleSize());
+	gcransac::sampler::UniformSampler main_sampler(&points);
 	//gcransac::sampler::UniformSampler main_sampler(&points);
 
 	// The local optimization sampler is used inside the local optimization
@@ -140,7 +140,7 @@ int find6DPoses_(
 		// Applying Progressive-X
 		progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 			gcransac::utils::DefaultPnPEstimator, // The type of the used model estimator
-			gcransac::sampler::ProsacSampler, // The type of the used main sampler in GC-RANSAC
+			gcransac::sampler::UniformSampler, // The type of the used main sampler in GC-RANSAC
 			gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 			progressive_x(nullptr);
 

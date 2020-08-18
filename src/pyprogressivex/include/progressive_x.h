@@ -64,7 +64,7 @@ namespace progx
 			confidence(0.95),
 			proposal_engine_confidence(1.0),
 			one_minus_confidence(0.05),
-			maximum_model_number_to_optimize(std::numeric_limits<size_t>::max()),
+			maximum_model_number_to_optimize(3),
 			maximum_model_number(std::numeric_limits<size_t>::max())
 		{
 			proposal_engine_settings.neighborhood_sphere_radius = cell_number_in_neighborhood_graph;
@@ -309,9 +309,9 @@ namespace progx
 			progx::Model<_ModelEstimator> putative_model;
 
 			// Reset the samplers
-			gcransac::sampler::ProsacSampler main_sampler(&current_data, // The data points
-				_ModelEstimator::sampleSize()); // The size of a minimal sample
-			//_MainSampler main_sampler(&current_data);
+			/*gcransac::sampler::ProsacSampler main_sampler(&current_data, // The data points
+				_ModelEstimator::sampleSize()); // The size of a minimal sample*/
+			_MainSampler main_sampler(&current_data);
 			_LocalOptimizerSampler local_optimization_sampler(&current_data);
 						
 			// Applying the proposal engine to get a new putative model
@@ -332,6 +332,8 @@ namespace progx
 			// Get the RANSAC statistics to know the inliers of the proposal
 			const gcransac::utils::RANSACStatistics &proposal_engine_statistics =
 				local_proposal_engine.getRansacStatistics();
+
+			statistics.scores.emplace_back(proposal_engine_statistics.score);
 
 			// Update the current iteration's statistics
 			iteration_statistics.time_of_proposal_engine =

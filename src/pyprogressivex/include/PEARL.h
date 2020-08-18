@@ -133,12 +133,13 @@ namespace pearl
 		PEARL(double inlier_outlier_threshold_,
 			double spatial_coherence_weight_,
 			size_t minimum_inlier_number_,
-			const size_t maximum_iteration_number_ = std::numeric_limits<size_t>::max()) :
+			const size_t maximum_iteration_number_ = 50) :
 			maximum_iteration_number(maximum_iteration_number_),
 			inlier_outlier_threshold(inlier_outlier_threshold_),
 			spatial_coherence_weight(spatial_coherence_weight_),
 			model_complexity_weight(minimum_inlier_number_),
 			minimum_inlier_number(minimum_inlier_number_),
+			epsilon(1e-5),
 			alpha_expansion_engine(nullptr),
 			verbose(false)
 		{
@@ -169,7 +170,8 @@ namespace pearl
 			// The model complexity weigth to reject insignificant model instances
 			model_complexity_weight,
 			// The inlier-outlier threshold
-			inlier_outlier_threshold;
+			inlier_outlier_threshold,
+			epsilon;
 
 		// The number of points
 		size_t point_number,
@@ -446,7 +448,7 @@ namespace pearl
 			// If nothing has changed, terminate
 			if (!model_rejected &&
 				!model_parameters_changed &&
-				abs(energy - previous_energy) < std::numeric_limits<double>::epsilon() &&
+				abs(energy - previous_energy) < epsilon &&
 				iteration_number > 1)
 				convergenve = true;
 
