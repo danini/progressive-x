@@ -52,6 +52,8 @@ int find6DPoses_(
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
 	const int &maximum_model_number,
+	const bool &use_prosac,
+	const size_t &maximum_model_number_for_optimization,
 	const bool &apply_numerical_optimization,
 	const bool &log)
 {	
@@ -176,7 +178,9 @@ int find6DPoses_(
 		settings.proposal_engine_settings.min_iteration_number = 10; 
 		// The radius of the neighborhood ball
 		settings.proposal_engine_settings.neighborhood_sphere_radius = 8; 
-		
+		// If more than this number of models are supposed to be found, turn of PEARL to speed up the procedure
+		settings.maximum_model_number_to_optimize = maximum_model_number_for_optimization;
+
 		// Setting the maximum model number if needed
 		if (maximum_model_number > 0)
 			settings.maximum_model_number = maximum_model_number;
@@ -221,10 +225,10 @@ int find6DPoses_(
 		gcransac.settings.threshold = normalized_threshold; // The inlier-outlier threshold
 		gcransac.settings.minimum_pixel_coverage = minimum_coverage;
 		gcransac.settings.spatial_coherence_weight = spatial_coherence_weight; // The weight of the spatial coherence term
-		gcransac.settings.confidence = confidence; // The required confidence in the results
+		gcransac.settings.confidence = proposal_engine_confidence; // The required confidence in the results
 		gcransac.settings.max_local_optimization_number = 20; // The maximum number of local optimizations
 		gcransac.settings.max_iteration_number = max_iters; // The maximum number of iterations
-		gcransac.settings.min_iteration_number = 1; // The minimum number of iterations
+		gcransac.settings.min_iteration_number = 10; // The minimum number of iterations
 		gcransac.settings.neighborhood_sphere_radius = 8; // The radius of the neighborhood ball
 		gcransac.settings.core_number = 1; // The number of parallel processes
 		gcransac.settings.used_pixels = pixels.size();
@@ -236,9 +240,15 @@ int find6DPoses_(
 			&local_optimization_sampler,
 			&neighborhood,
 			model);
-
+		
 		const utils::RANSACStatistics &statistics = gcransac.getRansacStatistics();
 		const size_t inlier_number = statistics.inliers.size();
+
+		if (log)
+		{
+			printf("Inlier number = %d\nIteration number = %d\n", inlier_number,
+				statistics.iteration_number);
+		}
 
 		scores.emplace_back(statistics.score);
 

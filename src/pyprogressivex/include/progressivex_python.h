@@ -20,5 +20,7 @@ int find6DPoses_(
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
 	const int &maximum_model_number,
+	const bool &use_prosac,
+	const size_t &maximum_model_number_for_optimization,
 	const bool &apply_numerical_optimization,
 	const bool &log);

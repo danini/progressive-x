@@ -22,6 +22,8 @@ py::tuple find6DPoses(
 	double min_coverage,
 	int max_iters,
 	int min_point_number,
+	bool use_prosac,
+	size_t max_model_number_for_optimization,
 	bool apply_numerical_optimization,
 	bool log) 
 {
@@ -90,6 +92,8 @@ py::tuple find6DPoses(
 		max_iters,
 		min_point_number,
 		max_model_number,
+		use_prosac,
+		max_model_number_for_optimization,
 		apply_numerical_optimization,
 		log);
 
@@ -142,6 +146,8 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("min_coverage") = 0.5,
 		py::arg("max_iters") = 400,
 		py::arg("min_point_number") = 2 * 3,
+		py::arg("use_prosac") = false,
+		py::arg("max_model_number_for_optimization") = 3,
 		py::arg("apply_numerical_optimization") = true,
 		py::arg("log") = false);
 
