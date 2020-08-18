@@ -431,10 +431,10 @@ namespace progx
 			{			
 				printf("-------------------------------------------\n");
 				printf("Iteration %d.\n", current_iteration + 1);
-
-				if (current_iteration > 100)
-					break;
 			}
+
+			if (current_iteration > 100)
+				break;
 
 			// Statistics of the current iteration
 			IterationStatistics iteration_statistics;
