@@ -34,6 +34,14 @@ $ cd build
 $ ./SampleProject
 ```
 
+# Jupyter Notebook example
+
+The example for multiple homography fitting is available at: [notebook](examples/example_multi_homography.ipynb).
+
+The example for multiple two-view motion fitting is available at: [notebook](examples/example_multi_two_view_motion.ipynb).
+ 
+The example for multiple 6D pose fitting is available at: [notebook](examples/example_multi_pose_6d.ipynb).
+
 # Requirements
 
 - Eigen 3.0 or higher
