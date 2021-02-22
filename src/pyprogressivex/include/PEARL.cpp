@@ -1,6 +1,6 @@
 #pragma once
 
-#include "pearl.h"
+#include "PEARL.h"
 
 namespace pearl
 {

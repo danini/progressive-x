@@ -21,7 +21,9 @@
 #include "progress_visualizer.h"
 
 #include <ctime>
-#include <direct.h>
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+	#include <direct.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -50,7 +52,6 @@ void testMultiHomographyFitting(
 	const bool has_detected_correspondences_ = false);
 
 void testMulti6DPoseFitting(
-	const std::string &scene_name_, // The name of the current scene 
 	const std::string &input_correspondence_path_, // The path of the detected correspondences
 	const std::string &camera_intrinsics_path_, // The path of the intrinsic camera parameters
 	const std::string &ground_truth_path_, // The path of the ground truth poses 
@@ -137,7 +138,6 @@ int main(int argc, const char* argv[])
 			root_directory + "results/" + scene + "/result_" + scene + ".txt"; // Path where the inlier correspondences are saved
 
 		testMulti6DPoseFitting(
-			scene, // The name of the current scene
 			input_correspondence_path, // The path where the detected correspondences (before the robust estimation) will be saved (or loaded from if exists)
 			intrinsics_path,// Path where the intrinsic camera parameters are
 			ground_truth_path, // Path where the ground truth poses are
@@ -311,7 +311,6 @@ bool initializeScene(const std::string &scene_name_, // The scene's name
 }
 
 void testMulti6DPoseFitting(
-	const std::string &scene_name_, // The name of the current scene 
 	const std::string &input_correspondence_path_, // The path of the detected correspondences
 	const std::string &camera_intrinsics_path_, // The path of the intrinsic camera parameters
 	const std::string &ground_truth_path_, // The path of the ground truth poses 
@@ -337,15 +336,18 @@ void testMulti6DPoseFitting(
 
 	// Normalize the correspondences by the intrinsic camera matrices
 	cv::Mat normalized_points(points.rows, 7, CV_64F);
+	cv::Mat normalized_image_coordinates(points.rows, 2, CV_64F);
 	gcransac::utils::normalizeImagePoints(
 		points(cv::Rect(0, 0, 2, points.rows)),
 		intrinsics,
-		normalized_points(cv::Rect(0, 0, 2, points.rows)));
-
-	// Copy the original 2D points to the last columns. They will be used for degeneracy testing
-	points(cv::Rect(0, 0, 2, points.rows)).copyTo(normalized_points(cv::Rect(5, 0, 2, points.rows)));
+		normalized_image_coordinates);
+	
+	// Copy the normalized image coordinates to the first two columns.
+	normalized_image_coordinates.copyTo(normalized_points(cv::Rect(0, 0, 2, points.rows)));
 	// Copy the 3D points to the matrix
 	points(cv::Rect(2, 0, 3, points.rows)).copyTo(normalized_points(cv::Rect(2, 0, 3, points.rows)));
+	// Copy the original 2D points to the last columns. They will be used for degeneracy testing
+	points(cv::Rect(0, 0, 2, points.rows)).copyTo(normalized_points(cv::Rect(5, 0, 2, points.rows)));
 
 	// Normalize the threshold
 	const double f = 
@@ -429,7 +431,7 @@ void testMulti6DPoseFitting(
 			}
 		}
 
-		printf("%d-th pose's error\n\tRotation error = %f\370\n\tTranslation error = %f mm\n",
+		printf("%d-th pose's error\n\tRotation error = %f degrees\n\tTranslation error = %f mm\n",
 			pose_idx + 1,
 			best_rotation_error,
 			best_translation_error);
@@ -522,13 +524,13 @@ void testMultiTwoViewMotionFitting(
 			pow(MAX(source_image.rows, destination_image.rows), 2));
 
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
+	gcransac::sampler::ProgressiveNapsacSampler<4> main_sampler(&points, // All data points
 		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
 		gcransac::utils::DefaultFundamentalMatrixEstimator::sampleSize(), // The size of a minimal sample
-		source_image.cols, // The width of the source image
-		source_image.rows, // The height of the source image
-		destination_image.cols, // The width of the destination image
-		destination_image.rows); // The height of the destination image
+		{ static_cast<double>(source_image.cols), // The width of the source image
+			static_cast<double>(source_image.rows), // The height of the source image
+			static_cast<double>(destination_image.cols), // The width of the destination image
+			static_cast<double>(destination_image.rows) }); // The height of the destination image
 	
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -543,7 +545,7 @@ void testMultiTwoViewMotionFitting(
 	// Applying Progressive-X
 	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 		gcransac::utils::DefaultFundamentalMatrixEstimator, // The type of the used model estimator
-		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::ProgressiveNapsacSampler<4>, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 		progressive_x(
 			// If the results should be visualized pass the point of the visualizer.
@@ -580,7 +582,9 @@ void testMultiTwoViewMotionFitting(
 
 	printf("Processing time = %f secs.\n", progressive_x.getStatistics().processing_time);
 	printf("Misclassification error <= %f\%.\n", misclassification_error);
-	printf("Number of found model instances = %d (there are %d instances in the reference labeling).\n", progressive_x.getModelNumber(), reference_model_number);
+	printf("Number of found model instances = %d (there are %d instances in the reference labeling).\n", 
+		static_cast<int>(progressive_x.getModelNumber()), 
+		static_cast<int>(reference_model_number));
 	
 	// Visualize the final results if needed
 	if (visualize_results_)
@@ -667,13 +671,13 @@ void testMultiHomographyFitting(
 			pow(MAX(source_image.rows, destination_image.rows), 2));
 
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
+	gcransac::sampler::ProgressiveNapsacSampler<4> main_sampler(&points, // All data points
 		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
 		gcransac::utils::DefaultHomographyEstimator::sampleSize(), // The size of a minimal sample
-		source_image.cols, // The width of the source image
-		source_image.rows, // The height of the source image
-		destination_image.cols, // The width of the destination image
-		destination_image.rows); // The height of the destination image
+		{ static_cast<double>(source_image.cols), // The width of the source image
+			static_cast<double>(source_image.rows), // The height of the source image
+			static_cast<double>(destination_image.cols), // The width of the destination image
+			static_cast<double>(destination_image.rows) }); // The height of the destination image
 
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -688,7 +692,7 @@ void testMultiHomographyFitting(
 	// Applying Progressive-X
 	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 		gcransac::utils::DefaultHomographyEstimator, // The type of the used model estimator
-		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::ProgressiveNapsacSampler<4>, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 		progressive_x(
 			// If the results should be visualized pass the point of the visualizer.

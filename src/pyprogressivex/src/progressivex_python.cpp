@@ -24,7 +24,9 @@
 #include "progressive_x.h"
 
 #include <ctime>
-#include <direct.h>
+#if defined(WIN32) || defined(_WIN32) || defined(__WIN32) && !defined(__CYGWIN__)
+	#include <direct.h>
+#endif
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -229,13 +231,13 @@ int findHomographies_(
 	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
 
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
+	gcransac::sampler::ProgressiveNapsacSampler<4> main_sampler(&points, // All data points
 		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
 		gcransac::utils::DefaultHomographyEstimator::sampleSize(), // The size of a minimal sample
-		max_x + std::numeric_limits<double>::epsilon(), // The width of the source image
-		max_y + std::numeric_limits<double>::epsilon(), // The height of the source image
-		max_x + std::numeric_limits<double>::epsilon(), // The width of the destination image
-		max_y + std::numeric_limits<double>::epsilon()); // The height of the destination image
+		{ max_x + std::numeric_limits<double>::epsilon(), // The width of the source image
+			max_y + std::numeric_limits<double>::epsilon(), // The height of the source image
+			max_x + std::numeric_limits<double>::epsilon(), // The width of the destination image
+			max_y + std::numeric_limits<double>::epsilon() }); // The height of the destination image
 
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -243,7 +245,7 @@ int findHomographies_(
 	// Applying Progressive-X
 	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 		gcransac::utils::DefaultHomographyEstimator, // The type of the used model estimator
-		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::ProgressiveNapsacSampler<4>, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 		progressive_x(nullptr);
 
@@ -359,13 +361,13 @@ int findTwoViewMotions_(
 	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
 
 	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProgressiveNapsacSampler main_sampler(&points, // All data points
+	gcransac::sampler::ProgressiveNapsacSampler<4> main_sampler(&points, // All data points
 		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
 		gcransac::utils::DefaultFundamentalMatrixEstimator::sampleSize(), // The size of a minimal sample
-		max_x + std::numeric_limits<double>::epsilon(), // The width of the source image
-		max_y + std::numeric_limits<double>::epsilon(), // The height of the source image
-		max_x + std::numeric_limits<double>::epsilon(), // The width of the destination image
-		max_y + std::numeric_limits<double>::epsilon()); // The height of the destination image
+		{max_x + std::numeric_limits<double>::epsilon(), // The width of the source image
+			max_y + std::numeric_limits<double>::epsilon(), // The height of the source image
+			max_x + std::numeric_limits<double>::epsilon(), // The width of the destination image
+			max_y + std::numeric_limits<double>::epsilon() }); // The height of the destination image
 
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -373,7 +375,7 @@ int findTwoViewMotions_(
 	// Applying Progressive-X
 	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 		gcransac::utils::DefaultFundamentalMatrixEstimator, // The type of the used model estimator
-		gcransac::sampler::ProgressiveNapsacSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::ProgressiveNapsacSampler<4>, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 		progressive_x(nullptr);
 

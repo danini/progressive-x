@@ -139,9 +139,16 @@ namespace pearl
 			inlier_outlier_threshold(inlier_outlier_threshold_),
 			spatial_coherence_weight(spatial_coherence_weight_),
 			model_complexity_weight(minimum_inlier_number_),
+			epsilon(1e-5),
 			minimum_inlier_number(minimum_inlier_number_),
 			alpha_expansion_engine(nullptr)
 		{
+		}
+
+		~PEARL()
+		{
+			if (alpha_expansion_engine != nullptr)
+				delete alpha_expansion_engine;
 		}
 
 		bool run(const cv::Mat &data_,
@@ -149,7 +156,7 @@ namespace pearl
 			_ModelEstimator *model_estimator_,
 			std::vector<progx::Model<_ModelEstimator>> *models_);
 		
-		const std::pair<const std::vector<size_t> &, size_t> getLabeling();
+		const std::pair<const std::vector<size_t> *, size_t> getLabeling();
 		void getLabeling(std::vector<size_t> &labeling_, 
 			size_t &instance_number_);
 
@@ -164,7 +171,9 @@ namespace pearl
 			// The model complexity weigth to reject insignificant model instances
 			model_complexity_weight,
 			// The inlier-outlier threshold
-			inlier_outlier_threshold;
+			inlier_outlier_threshold,
+			// The stopping criterion threshold for the iteration
+			epsilon;
 
 		// The number of points
 		size_t point_number,
@@ -229,14 +238,14 @@ namespace pearl
 
 	template<class _NeighborhoodGraph, // The type of neighborhood graph which is used in the spatial coherence term
 		class _ModelEstimator> // The type of the model estimator used for estimating the model from a set of data points
-	const std::pair<const std::vector<size_t> &, size_t> PEARL<_NeighborhoodGraph, _ModelEstimator>::getLabeling()	 
+	const std::pair<const std::vector<size_t> *, size_t> PEARL<_NeighborhoodGraph, _ModelEstimator>::getLabeling()	 
 	{
 		// Resizing the container of the labeling
 		point_to_instance_labeling.resize(point_number, 0);
 		// If the alpha-expansion engine has not been initialized yet, return the labeling as
 		// if all points are outliers.
 		if (alpha_expansion_engine == nullptr)
-			return std::make_pair<const std::vector<size_t> &, size_t>(point_to_instance_labeling, 1);
+			return std::make_pair(&point_to_instance_labeling, 1);
 				
 		size_t max_label = 0; // Store the label number, i.e., the number of model instances used in the labeling
 		// Iterate through the points and save the obtained labels.
@@ -248,7 +257,7 @@ namespace pearl
 		}
 
 		// Return a constant reference to the label container together with the distinct label number in it.
-		return std::make_pair<const std::vector<size_t> &, size_t>(point_to_instance_labeling, max_label);
+		return std::make_pair(&point_to_instance_labeling, max_label);
 	}
 
 	template<class _NeighborhoodGraph, // The type of neighborhood graph which is used in the spatial coherence term
@@ -388,10 +397,10 @@ namespace pearl
 		point_number = data_.rows; // The number of points
 		size_t iteration_number = 0, // The number of current iterations
 			iteration_number_without_change; // The number of consecutive iterations when nothing has changed.
-		double energy,  // The energy of the alpha-expansion
+		double energy = std::numeric_limits<double>::max(),  // The energy of the alpha-expansion
 			previous_energy = -1.0; // The energy of the previous alpha-expansion
-		bool model_parameters_changed, // A flag to see of the model parameters changed after re-fitting
-			model_rejected, // A flag to see if any model has been rejected 
+		bool model_parameters_changed = false, // A flag to see of the model parameters changed after re-fitting
+			model_rejected = false, // A flag to see if any model has been rejected 
 			convergenve = false; // A flag to see if the algorithm has converges
 
 		// The main PEARL iteration doing the labeling and model refitting iteratively.
@@ -437,7 +446,7 @@ namespace pearl
 			// If nothing has changed, terminate
 			if (!model_rejected &&
 				!model_parameters_changed &&
-				abs(energy - previous_energy) < std::numeric_limits<double>::epsilon() &&
+				abs(energy - previous_energy) < epsilon &&
 				iteration_number > 1)
 				convergenve = true;
 
