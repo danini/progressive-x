@@ -64,32 +64,6 @@ endif()
 # ==============================================================================
 # Find GLOG
 # ==============================================================================
-#include(FindPackageHandleStandardArgs)
-#
-#set(GLOG_ROOT_DIR "" CACHE PATH "Folder contains Google glog")
-# 
-#find_path(GLOG_INCLUDE_DIR glog/logging.h
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        src)
-# 
-#find_library(GLOG_LIBRARY glog libglog
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        .libs
-#        lib
-#        lib64)
-# 
-#find_package_handle_standard_args(GLOG DEFAULT_MSG
-#    GLOG_INCLUDE_DIR GLOG_LIBRARY)
-# 
-#if(GLOG_FOUND)
-#    set(GLOG_INCLUDE_DIRS ${GLOG_INCLUDE_DIR})
-#    set(GLOG_LIBRARIES ${GLOG_LIBRARY})
-#endif()
-#
 find_package(glog REQUIRED)
 if(NOT glog_FOUND)
 	message(FATAL_ERROR "Glog not found.")
@@ -157,19 +131,8 @@ file(GLOB_RECURSE SRCS_PROGRESSIVEX
 )
 
 # ==============================================================================
-# Structure: Python binding
+# Structure: Progressive-X
 # ==============================================================================
-# Generate python module
-add_subdirectory(lib/pybind11)
-
-pybind11_add_module(pyprogressivex ${SOURCE_DIR}/src/bindings.cpp ${SOURCE_DIR}/src/progressivex_python.cpp  ${HDRS_PROGRESSIVEX} ${SRCS_PROGRESSIVEX} )
-target_link_libraries(pyprogressivex PRIVATE  
-	${OpenCV_LIBS} 
-	Eigen3::Eigen 
-	glog::glog 
-	gflags
-	GraphCutRANSAC)
-
 add_library(${PROJECT_NAME} STATIC
 	${HDRS_PROGRESSIVEX}
 	${SRCS_PROGRESSIVEX}
@@ -187,20 +150,18 @@ set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
 # ==============================================================================
 # Structure: Applications
 # ==============================================================================
-if (CREATE_SAMPLE_PROJECT)
-	set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build)
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/build)
 
-	add_executable(SampleProject
-		examples/cpp_example.cpp)
-		
-	target_link_libraries(SampleProject PUBLIC
-		${OpenCV_LIBS}
-		${PROJECT_NAME}
-		Eigen3::Eigen
-		gflags
-		glog::glog
-		GraphCutRANSAC
-	)
+add_executable(LineSegmentFitting
+	examples/line_segment_fitting.cpp)
+	
+target_link_libraries(LineSegmentFitting PUBLIC
+	${OpenCV_LIBS}
+	${PROJECT_NAME}
+	Eigen3::Eigen
+	gflags
+	glog::glog
+	GraphCutRANSAC
+)
 
-	add_dependencies(SampleProject ${PROJECT_NAME})
-endif (CREATE_SAMPLE_PROJECT)
+add_dependencies(LineSegmentFitting ${PROJECT_NAME})

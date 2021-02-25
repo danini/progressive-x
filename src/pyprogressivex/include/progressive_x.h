@@ -356,6 +356,7 @@ namespace progx
 			if (models.size() == 1)
 			{
 				// Store the inliers of the current model to the statistics object
+				statistics.inliers_of_each_model.clear();
 				statistics.inliers_of_each_model.emplace_back(
 					proposal_engine->getRansacStatistics().inliers);
 
@@ -375,6 +376,20 @@ namespace progx
 
 				size_t model_number = 0;
 				model_optimizer->getLabeling(statistics.labeling, model_number);
+
+				const auto &labeling = statistics.labeling;
+				statistics.inliers_of_each_model.clear();
+				statistics.inliers_of_each_model.resize(model_number);
+				for (size_t pointIdx = 0; pointIdx < point_number; ++pointIdx)
+				{
+					// Get the label of the current point
+					const auto &label = labeling[pointIdx];
+					// Continue, if it is assigned to the outlier class
+					if (label >= model_number)
+						continue;
+					// Add the point index to the assigned model's inlier container
+					statistics.inliers_of_each_model[label].emplace_back(pointIdx);
+				}
 
 				if (model_number != models.size())
 				{
