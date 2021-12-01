@@ -12,14 +12,17 @@
 #include "progx_utils.h"
 #include "utils.h"
 #include "GCoptimization.h"
-#include "grid_neighborhood_graph.h"
-#include "flann_neighborhood_graph.h"
-#include "uniform_sampler.h"
-#include "prosac_sampler.h"
-#include "progressive_napsac_sampler.h"
-#include "fundamental_estimator.h"
-#include "homography_estimator.h"
-#include "essential_estimator.h"
+#include "neighborhood/grid_neighborhood_graph.h"
+#include "neighborhood/flann_neighborhood_graph.h"
+
+#include "samplers/uniform_sampler.h"
+#include "samplers/prosac_sampler.h"
+#include "samplers/napsac_sampler.h"
+#include "samplers/progressive_napsac_sampler.h"
+
+#include "estimators/fundamental_estimator.h"
+#include "estimators/homography_estimator.h"
+#include "estimators/essential_estimator.h"
 
 #include "progressive_x.h"
 
@@ -166,10 +169,13 @@ int find6DPoses_(
 }
 
 int findHomographies_(
-	const std::vector<double>& sourcePoints,
-	const std::vector<double>& destinationPoints,
+	std::vector<double>& correspondences,
 	std::vector<size_t>& labeling,
 	std::vector<double>& homographies,
+	const size_t &source_image_width,
+	const size_t &source_image_height,
+	const size_t &destination_image_width,
+	const size_t &destination_image_height,
 	const double &spatial_coherence_weight,
 	const double &threshold,
 	const double &confidence,
@@ -177,7 +183,9 @@ int findHomographies_(
 	const double &maximum_tanimoto_similarity,
 	const size_t &max_iters,
 	const size_t &minimum_point_number,
-	const int &maximum_model_number)
+	const int &maximum_model_number,
+	const size_t &sampler_id,
+	const bool do_logging)
 {
 	// Initialize Google's logging library.
 	static bool isLoggingInitialized = false;
@@ -187,57 +195,51 @@ int findHomographies_(
 		isLoggingInitialized = true;
 	}
 	
-	const size_t num_tents = sourcePoints.size() / 2;
-	
-	double max_x = std::numeric_limits<double>::min(),
-		min_x =  std::numeric_limits<double>::max(),
-		max_y = std::numeric_limits<double>::min(),
-		min_y =  std::numeric_limits<double>::max();
+	const size_t num_tents = correspondences.size() / 4;
 		
-	cv::Mat points(num_tents, 4, CV_64F);
-	for (size_t i = 0; i < num_tents; ++i) {
-		
-		const double 
-			&x1 = sourcePoints[2 * i],
-			&y1 = sourcePoints[2 * i + 1],
-			&x2 = destinationPoints[2 * i],
-			&y2 = destinationPoints[2 * i + 1];
-		
-		max_x = MAX(max_x, x1);
-		min_x = MIN(min_x, x1);
-		max_x = MAX(max_x, x2);
-		min_x = MIN(min_x, x2);
-		
-		max_y = MAX(max_y, y1);
-		min_y = MIN(min_y, y1);
-		max_y = MAX(max_y, y2);
-		min_y = MIN(min_y, y2);
-		
-		points.at<double>(i, 0) = x1;
-		points.at<double>(i, 1) = y1;
-		points.at<double>(i, 2) = x2;
-		points.at<double>(i, 3) = y2;
-	}
+	cv::Mat points(num_tents, 4, CV_64F, &correspondences[0]);
 	
 	// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
 	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
-	std::chrono::time_point<std::chrono::system_clock> start, end; // Variables for time measurement
-	start = std::chrono::system_clock::now(); // The starting time of the neighborhood calculation
 	gcransac::neighborhood::FlannNeighborhoodGraph neighborhood(&points, // All data points
 		neighborhood_ball_radius); // The radius of the neighborhood ball for determining the neighborhoods.
-	end = std::chrono::system_clock::now(); // The end time of the neighborhood calculation
-	std::chrono::duration<double> elapsed_seconds = end - start; // The elapsed time in seconds
 
-	printf("Neighborhood calculation time = %f secs.\n", elapsed_seconds.count());
-
-	// The main sampler is used inside the local optimization
-	gcransac::sampler::ProgressiveNapsacSampler<4> main_sampler(&points, // All data points
-		{ 16, 8, 4, 2 }, // The layer structure of the sampler's multiple grids
-		gcransac::utils::DefaultHomographyEstimator::sampleSize(), // The size of a minimal sample
-		{ max_x + std::numeric_limits<double>::epsilon(), // The width of the source image
-			max_y + std::numeric_limits<double>::epsilon(), // The height of the source image
-			max_x + std::numeric_limits<double>::epsilon(), // The width of the destination image
-			max_y + std::numeric_limits<double>::epsilon() }); // The height of the destination image
+	// Initialize the samplers
+	// The main sampler is used for sampling in the main RANSAC loop
+	constexpr size_t kSampleSize = gcransac::utils::DefaultHomographyEstimator::sampleSize();
+	typedef gcransac::sampler::Sampler<cv::Mat, size_t> AbstractSampler;
+	std::unique_ptr<AbstractSampler> main_sampler;
+	if (sampler_id == 0) // Initializing a RANSAC-like uniformly random sampler
+		main_sampler = std::unique_ptr<AbstractSampler>(new gcransac::sampler::UniformSampler(&points));
+	else if (sampler_id == 1)  // Initializing a PROSAC sampler. This requires the points to be ordered according to the quality.
+	{
+		if (do_logging)
+			printf("Note: PROSAC sampler requires the correspondences to be order by quality, e.g., SNN ratio.\n");
+		main_sampler = std::unique_ptr<AbstractSampler>(new gcransac::sampler::ProsacSampler(&points, kSampleSize));
+	}
+	else if (sampler_id == 2) // Initializing a Progressive NAPSAC sampler. This requires the points to be ordered according to the quality.
+	{
+		if (do_logging)
+			printf("Note: Progressive NAPSAC sampler requires the correspondences to be order by quality, e.g., SNN ratio.\n");
+		main_sampler = std::unique_ptr<AbstractSampler>(new gcransac::sampler::ProgressiveNapsacSampler<4>(&points,
+			{ 16, 8, 4, 2 },	// The layer of grids. The cells of the finest grid are of dimension 
+								// (source_image_width / 16) * (source_image_height / 16)  * (destination_image_width / 16)  (destination_image_height / 16), etc.
+			kSampleSize, // The size of a minimal sample
+			{ source_image_width, // The width of the source image
+				source_image_height, // The height of the source image
+				destination_image_width, // The width of the destination image
+				destination_image_height }, // The height of the destination image
+			0.5)); // The length (i.e., 0.5 * <point number> iterations) of fully blending to global sampling 
+	}
+	else if (sampler_id == 3) // Initializing a NAPSAC sampler
+		main_sampler = std::unique_ptr<AbstractSampler>(
+			new gcransac::sampler::NapsacSampler<gcransac::neighborhood::FlannNeighborhoodGraph>(&points, &neighborhood));
+	else
+	{
+		fprintf(stderr, "Unknown sampler identifier: %d. The accepted samplers are 0 (uniform sampling), 1 (PROSAC sampling), 2 (P-NAPSAC sampling)\n",
+			sampler_id);
+		return 0;
+	}
 
 	// The local optimization sampler is used inside the local optimization
 	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
@@ -245,7 +247,7 @@ int findHomographies_(
 	// Applying Progressive-X
 	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
 		gcransac::utils::DefaultHomographyEstimator, // The type of the used model estimator
-		gcransac::sampler::ProgressiveNapsacSampler<4>, // The type of the used main sampler in GC-RANSAC
+		AbstractSampler, // The type of the used main sampler in GC-RANSAC
 		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
 		progressive_x(nullptr);
 
@@ -270,11 +272,12 @@ int findHomographies_(
 
 	progressive_x.run(points, // All data points
 		neighborhood, // The neighborhood graph
-		main_sampler, // The main sampler used in GC-RANSAC
+		*main_sampler.get(), // The main sampler used in GC-RANSAC
 		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
 	
 	// The obtained labeling
 	labeling = progressive_x.getStatistics().labeling;
+
 	homographies.reserve(9 * progressive_x.getModelNumber());
 	
 	// Saving the homography parameters

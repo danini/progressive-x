@@ -17,18 +17,23 @@ int find6DPoses_(
 	const int &maximum_model_number);
 
 int findHomographies_(
-		const std::vector<double>& sourcePoints,
-		const std::vector<double>& destinationPoints,
-		std::vector<size_t>& labeling,
-		std::vector<double>& homographies,
-		const double &spatial_coherence_weight,
-		const double &threshold,
-		const double &confidence,
-		const double &neighborhood_ball_radius,
-		const double &maximum_tanimoto_similarity,
-		const size_t &max_iters,
-		const size_t &minimum_point_number,
-		const int &maximum_model_number);
+	std::vector<double>& correspondences,
+	std::vector<size_t>& labeling,
+	std::vector<double>& homographies,
+	const size_t &source_image_width,
+	const size_t &source_image_height,
+	const size_t &destination_image_width,
+	const size_t &destination_image_height,
+	const double &spatial_coherence_weight,
+	const double &threshold,
+	const double &confidence,
+	const double &neighborhood_ball_radius,
+	const double &maximum_tanimoto_similarity,
+	const size_t &max_iters,
+	const size_t &minimum_point_number,
+	const int &maximum_model_number,
+	const size_t &sampler_id,
+	const bool do_logging);
 		
 int findTwoViewMotions_(
 		const std::vector<double>& sourcePoints,

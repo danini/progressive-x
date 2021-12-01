@@ -85,6 +85,7 @@ namespace progx
 		const double circe_radius;
 		const size_t window_width,
 			window_height;
+		bool do_logging;
 		std::unordered_map<std::string, cv::Mat> shown_images; // The images shown
 
 		const cv::Mat 
@@ -133,6 +134,7 @@ namespace progx
 			points(points_),
 			image_source(image_source_),
 			image_destination(image_destination_),
+			do_logging(false),
 			circe_radius(circe_radius_),
 			window_width(window_width_),
 			window_height(window_height_),
@@ -165,9 +167,10 @@ namespace progx
 		{
 			if (labeling->size() != point_number)
 			{
-				LOG(WARNING) << 
-					"A problem occured when doing multi-homography visualization. " <<
-					"There are fewer labels than points when visualizing the progress.";
+				if (do_logging)
+					LOG(WARNING) << 
+						"A problem occured when doing multi-homography visualization. " <<
+						"There are fewer labels than points when visualizing the progress.";
 				return;
 			}
 

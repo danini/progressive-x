@@ -3,6 +3,7 @@
 #include <math.h>
 #include <random>
 #include <vector>
+#include <iostream>
 
 #include <opencv2/core/core.hpp>
 #include <Eigen/Eigen>
@@ -134,14 +135,15 @@ namespace pearl
 		PEARL(double inlier_outlier_threshold_,
 			double spatial_coherence_weight_,
 			size_t minimum_inlier_number_,
-			const size_t maximum_iteration_number_ = std::numeric_limits<size_t>::max()) :
+			const size_t maximum_iteration_number_ = 100) :
 			maximum_iteration_number(maximum_iteration_number_),
 			inlier_outlier_threshold(inlier_outlier_threshold_),
 			spatial_coherence_weight(spatial_coherence_weight_),
 			model_complexity_weight(minimum_inlier_number_),
 			epsilon(1e-5),
 			minimum_inlier_number(minimum_inlier_number_),
-			alpha_expansion_engine(nullptr)
+			alpha_expansion_engine(nullptr),
+			do_logging(false)
 		{
 		}
 
@@ -174,6 +176,9 @@ namespace pearl
 			inlier_outlier_threshold,
 			// The stopping criterion threshold for the iteration
 			epsilon;
+
+		// Flag determining if logging is required
+		bool do_logging;
 
 		// The number of points
 		size_t point_number,
@@ -295,8 +300,9 @@ namespace pearl
 				// the labeling should be applied again.
 				changed_ = true;
 
-				LOG(INFO) << "[Optimization] Instance " << instance_idx << 
-					" is rejected due to having too few inliers (" << inlier_number  << ").";
+				if (do_logging)
+					LOG(INFO) << "[Optimization] Instance " << instance_idx << 
+						" is rejected due to having too few inliers (" << inlier_number  << ").";
 			}
 		}
 
@@ -314,7 +320,8 @@ namespace pearl
 		// If the alpha-expansion engine has not been initialized, return.
 		if (alpha_expansion_engine == nullptr)
 		{
-			LOG(WARNING) << "The alpha-expansion engine has not been initialized.";
+			if (do_logging)
+				LOG(WARNING) << "The alpha-expansion engine has not been initialized.";
 			return;
 		}
 
@@ -407,7 +414,9 @@ namespace pearl
 		while (!convergenve && // Break when the results converged.
 			iteration_number++ < maximum_iteration_number) // Break when the maximum iteration limit has been exceeded.
 		{
-			LOG(INFO) << "[Optimization] Iteration " << iteration_number << ".";
+			//std::cout << 81 << " " << iteration_number << std::endl;
+			if (do_logging)
+				LOG(INFO) << "[Optimization] Iteration " << iteration_number << ".";
 
 			// A flag to decide if the previous labeling should be used as an initial one.
 			// It is true if it is not the first iteration and the number of models has not been changed. 
@@ -415,6 +424,7 @@ namespace pearl
 				iteration_number > 1 && 
 				!model_rejected;
 
+			//std::cout << 82 << std::endl;
 			// Apply alpha-expansion to get the labeling which assigns each point to a model instance
 			labeling(data_, // All data points
 				models_,
@@ -423,7 +433,8 @@ namespace pearl
 				initialize_with_previous_labeling, // A flag to decide if the previous labeling should be used as an initial one.
 				energy); // The energy of the alpha-expansion
 
-			LOG(INFO) << "[Optimization] The energy of the labeling is " << energy << ".";
+			if (do_logging)
+				LOG(INFO) << "[Optimization] The energy of the labeling is " << energy << ".";
 
 			// A flag to see if the model parameters changed.
 			// Initialize as if nothing has changed.
@@ -433,12 +444,14 @@ namespace pearl
 			// Initialize as if nothing has changed.
 			model_rejected = false;
 			
+			//std::cout << 83 << std::endl;
 			// Re-estimate the model parameters based on the determined labeling
 			parameterEstimation(data_, // All data points
 				models_, // The currently stored models, i.e., the compound model
 				model_estimator_, // The model estimator used for estimating the model parameters from a set of data points
 				model_parameters_changed); // A flag to see if anything has changed
 
+			//std::cout << 84 << std::endl;
 			rejectInstances(data_, // All data points
 				models_, // The currently stored models, i.e., the compound model
 				model_rejected); // A flag to see if anything has changed
@@ -451,6 +464,7 @@ namespace pearl
 				convergenve = true;
 
 			previous_energy = energy;
+			//std::cout << 85 << std::endl;
 		}
 		return true;
 	}
@@ -465,6 +479,7 @@ namespace pearl
 			const bool initialize_with_previous_labeling_,
 			double &energy_)
 	{
+		//std::cout << 821 << std::endl;
 		// Return if there are no model instances
 		if (models_->size() == 0)
 			return false;
@@ -490,6 +505,7 @@ namespace pearl
 		alpha_expansion_engine =
 			new GCoptimizationGeneralGraph(static_cast<int>(point_number), static_cast<int>(models_->size()) + 1);
 
+		//std::cout << 822 << std::endl;
 		// The object consisting of all information required for the energy calculations
 		EnergyDataStructure<_ModelEstimator> information_object(
 			data_, // The data points
@@ -517,6 +533,7 @@ namespace pearl
 					if (point_idx != neighbor_idx)
 						alpha_expansion_engine->setNeighbors(point_idx, neighbor_idx);
 		
+		//std::cout << 823 << " " << previous_labeling.size() << std::endl;
 		// If nothing has changed since the previous labeling, use
 		// the previous labels as initial values.
 		if (initialize_with_previous_labeling_ &&
@@ -530,6 +547,7 @@ namespace pearl
 		int iteration_number;
 		energy_ = alpha_expansion_engine->expansion(iteration_number, 
 			1000);
+		//std::cout << 824 << std::endl;
 		
 		return true;
 	}

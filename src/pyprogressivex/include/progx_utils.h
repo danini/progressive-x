@@ -39,9 +39,7 @@ bool loadPointsWithLabels(
 
 	if (!infile.is_open())
 	{
-		LOG(FATAL) <<
-			"A problem occured when loading the points from file \"" <<
-			file_ << "\", The file does not exist.";
+		fprintf(stderr, "A problem occured when loading the points from file '%s'. The file does not exist.", file_);
 		return false;
 	}
 
@@ -67,9 +65,7 @@ bool loadPointsWithLabels(
 		if (loaded_coordinates.size() > 0 &&
 			loaded_coordinates.back().size() != split_elements.size())
 		{
-			LOG(FATAL) <<
-				"A problem occured when loading the points from file \"" <<
-				file_ << "\". The number of coordinates vary in the rows.";
+			fprintf(stderr, "A problem occured when loading the points from file '%s'. The number of coordinates varies in the rows.", file_);
 			return false;
 		}
 
@@ -95,9 +91,6 @@ bool loadPointsWithLabels(
 		labels_[point_idx] = loaded_coordinates[point_idx].back();
 		reference_model_number_ = MAX(reference_model_number_, labels_[point_idx]);
 	}
-
-	LOG(INFO) << 
-		"Number of loaded correspondences = " << point_number;
 
 	return true;
 }
