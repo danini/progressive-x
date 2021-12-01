@@ -34,6 +34,10 @@ $ cd build
 $ ./SampleProject
 ```
 
+# Jupyter Notebook code for re-producing the results in the paper
+
+The code for multiple homography fitting is available at: [notebook](dataset_comparison/adelaideH.ipynb).
+
 # Jupyter Notebook example
 
 The example for multiple homography fitting is available at: [notebook](examples/example_multi_homography.ipynb).
