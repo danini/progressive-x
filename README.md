@@ -38,6 +38,8 @@ $ ./SampleProject
 
 The code for multiple homography fitting is available at: [notebook](dataset_comparison/adelaideH.ipynb).
 
+The code for multiple two-view motion fitting is available at: [notebook](dataset_comparison/adelaideF.ipynb).
+
 # Jupyter Notebook example
 
 The example for multiple homography fitting is available at: [notebook](examples/example_multi_homography.ipynb).
