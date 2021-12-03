@@ -106,6 +106,7 @@ py::tuple findHomographies(
 	int minimum_point_number,
 	int maximum_model_number,
 	int sampler_id,
+	double scoring_exponent,
 	bool do_logging) {
 		
 	py::buffer_info buf1 = corrs_.request();
@@ -142,6 +143,7 @@ py::tuple findHomographies(
 		minimum_point_number,
 		maximum_model_number,
 		sampler_id,
+		scoring_exponent,
 		do_logging);
 		
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
@@ -159,8 +161,9 @@ py::tuple findHomographies(
 }
 
 py::tuple findTwoViewMotions(
-	py::array_t<double>  x1y1_,
-	py::array_t<double>  x2y2_,
+	py::array_t<double>  corrs_,
+	size_t w1, size_t h1,
+	size_t w2, size_t h2,
 	double threshold,
 	double conf,
 	double spatial_coherence_weight,
@@ -168,45 +171,35 @@ py::tuple findTwoViewMotions(
 	double maximum_tanimoto_similarity,
 	int max_iters,
 	int minimum_point_number,
-	int maximum_model_number) 
+	int maximum_model_number,
+	int sampler_id,
+	double scoring_exponent,
+	bool do_logging)
 {		
-	py::buffer_info buf1 = x1y1_.request();
+	py::buffer_info buf1 = corrs_.request();
 	size_t NUM_TENTS = buf1.shape[0];
 	size_t DIM = buf1.shape[1];
 
-	if (DIM != 2) {
-		throw std::invalid_argument("x1y1 should be an array with dims [n,2], n>=4");
+	if (DIM != 4) {
+		throw std::invalid_argument("corrs should be an array with dims [n,4], n>=7");
 	}
-	if (NUM_TENTS < 4) {
-		throw std::invalid_argument("x1y1 should be an array with dims [n,2], n>=4");
-	}
-	py::buffer_info buf1a = x2y2_.request();
-	size_t NUM_TENTSa = buf1a.shape[0];
-	size_t DIMa = buf1a.shape[1];
-
-	if (DIMa != 2) {
-		throw std::invalid_argument("x2y2 should be an array with dims [n,2], n>=4");
-	}
-	if (NUM_TENTSa != NUM_TENTS) {
-		throw std::invalid_argument("x1y1 and x2y2 should be the same size");
+	if (NUM_TENTS < 7) {
+		throw std::invalid_argument("corrs should be an array with dims [n,4], n>=7");
 	}
 
 	double *ptr1 = (double *)buf1.ptr;
-	std::vector<double> x1y1;
-	x1y1.assign(ptr1, ptr1 + buf1.size);
+	std::vector<double> corrs;
+	corrs.assign(ptr1, ptr1 + buf1.size);
 
-	double *ptr1a = (double *)buf1a.ptr;
-	std::vector<double> x2y2;
-	x2y2.assign(ptr1a, ptr1a + buf1a.size);
-	std::vector<double> motions;
-	
+	std::vector<double> motions;	
 	std::vector<size_t> labeling(NUM_TENTS);
 
 	int num_models = findTwoViewMotions_(
-		x1y1,
-		x2y2,
+		corrs,
 		labeling,
 		motions,
+		w1, h1,
+		w2, h2,
 		spatial_coherence_weight,
 		threshold,
 		conf,
@@ -214,7 +207,10 @@ py::tuple findTwoViewMotions(
 		maximum_tanimoto_similarity,
 		max_iters,
 		minimum_point_number,
-		maximum_model_number);
+		maximum_model_number,
+		sampler_id,
+		scoring_exponent,
+		do_logging);
 		
 	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
 	py::buffer_info buf3 = labeling_.request();
@@ -242,7 +238,6 @@ PYBIND11_PLUGIN(pyprogressivex) {
            find6DPoses,
            findHomographies,
            findTwoViewMotions,
-
     )doc");
 
 	m.def("findHomographies", &findHomographies, R"doc(some doc)doc",
@@ -260,19 +255,26 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("minimum_point_number") = 10,
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
+		py::arg("scoring_exponent") = 2,
 		py::arg("do_logging") = true);
 
 	m.def("findTwoViewMotions", &findTwoViewMotions, R"doc(some doc)doc",
-		py::arg("x1y1"),
-		py::arg("x2y2"),
-		py::arg("threshold") = 0.75,
-		py::arg("conf") = 0.90,
-		py::arg("spatial_coherence_weight") = 0.1,
-		py::arg("neighborhood_ball_radius") = 20.0,
-		py::arg("maximum_tanimoto_similarity") = 0.9,
+		py::arg("corrs"),
+		py::arg("w1"),
+		py::arg("h1") ,
+		py::arg("w2"),
+		py::arg("h2"),
+		py::arg("threshold") = 4.0,
+		py::arg("conf") = 0.5,
+		py::arg("spatial_coherence_weight") = 0.0,
+		py::arg("neighborhood_ball_radius") = 200.0,
+		py::arg("maximum_tanimoto_similarity") = 0.4,
 		py::arg("max_iters") = 1000,
-		py::arg("minimum_point_number") = 2 * 7,
-		py::arg("maximum_model_number") = -1);
+		py::arg("minimum_point_number") = 10,
+		py::arg("maximum_model_number") = -1,
+		py::arg("sampler_id") = 3,
+		py::arg("scoring_exponent") = 3,		
+		py::arg("do_logging") = true);
 		
 	m.def("find6DPoses", &find6DPoses, R"doc(some doc)doc",
 		py::arg("x1y1"),
