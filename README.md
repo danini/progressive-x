@@ -47,6 +47,8 @@ The example for multiple homography fitting is available at: [notebook](examples
 The example for multiple two-view motion fitting is available at: [notebook](examples/example_multi_two_view_motion.ipynb).
  
 The example for multiple 6D pose fitting is available at: [notebook](examples/example_multi_pose_6d.ipynb).
+ 
+The example for multiple vanishing point detection is available at: [notebook](examples/example_multi_vanishing_point.ipynb).
 
 # Requirements
 
