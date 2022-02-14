@@ -65,7 +65,8 @@ namespace progx
 			const double threshold_, // The inlier-outlier threshold
 			std::vector<size_t> &inliers_, // The selected inliers
 			const gcransac::Score &best_score_ = gcransac::Score(), // The score of the current so-far-the-best model
-			const bool store_inliers_ = true) const
+			const bool store_inliers_ = true, // A flag to decide if the inliers should be stored
+			const std::vector<const std::vector<size_t>*> *index_sets = nullptr) const // Index sets to be verified
 		{
 			gcransac::Score score; // The current score
 			if (store_inliers_) // If the inlier should be stored, clear the variables

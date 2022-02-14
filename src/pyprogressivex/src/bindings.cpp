@@ -160,6 +160,70 @@ py::tuple findHomographies(
 	return py::make_tuple(homographies_, labeling_);
 }
 
+py::tuple findVanishingPoints(
+	py::array_t<double>  lines_,
+	size_t w, size_t h,
+	double threshold,
+	double conf,
+	double spatial_coherence_weight,
+	double neighborhood_ball_radius,
+	double maximum_tanimoto_similarity,
+	int max_iters,
+	int minimum_point_number,
+	int maximum_model_number,
+	int sampler_id,
+	double scoring_exponent,
+	bool do_logging) {
+		
+	py::buffer_info buf1 = lines_.request();
+	size_t NUM_TENTS = buf1.shape[0];
+	size_t DIM = buf1.shape[1];
+
+	if (DIM != 4) {
+		throw std::invalid_argument("lines should be an array with dims [n,4], n>=2");
+	}
+	if (NUM_TENTS < 2) {
+		throw std::invalid_argument("lines should be an array with dims [n,4], n>=2");
+	}
+
+	double *ptr1 = (double *)buf1.ptr;
+	std::vector<double> corrs;
+	corrs.assign(ptr1, ptr1 + buf1.size);
+
+	std::vector<double> vanishingPoints;	
+	std::vector<size_t> labeling(NUM_TENTS);
+
+	int num_models = findVanishingPoints_(
+		corrs,
+		labeling,
+		vanishingPoints,
+		w, h,
+		spatial_coherence_weight,
+		threshold,
+		conf,
+		neighborhood_ball_radius,
+		maximum_tanimoto_similarity,
+		max_iters,
+		minimum_point_number,
+		maximum_model_number,
+		sampler_id,
+		scoring_exponent,
+		do_logging);
+		
+	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
+	py::buffer_info buf3 = labeling_.request();
+	int *ptr3 = (int *)buf3.ptr;
+	for (size_t i = 0; i < NUM_TENTS; i++)
+		ptr3[i] = static_cast<int>(labeling[i]);
+	
+	py::array_t<double> vanishingPoints_ = py::array_t<double>({ static_cast<size_t>(num_models), 3 });
+	py::buffer_info buf2 = vanishingPoints_.request();
+	double *ptr2 = (double *)buf2.ptr;
+	for (size_t i = 0; i < 3 * num_models; i++)
+		ptr2[i] = vanishingPoints[i];
+	return py::make_tuple(vanishingPoints_, labeling_);
+}
+
 py::tuple findTwoViewMotions(
 	py::array_t<double>  corrs_,
 	size_t w1, size_t h1,
@@ -246,6 +310,22 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("h1") ,
 		py::arg("w2"),
 		py::arg("h2"),
+		py::arg("threshold") = 4.0,
+		py::arg("conf") = 0.5,
+		py::arg("spatial_coherence_weight") = 0.0,
+		py::arg("neighborhood_ball_radius") = 200.0,
+		py::arg("maximum_tanimoto_similarity") = 0.4,
+		py::arg("max_iters") = 1000,
+		py::arg("minimum_point_number") = 10,
+		py::arg("maximum_model_number") = -1,
+		py::arg("sampler_id") = 3,
+		py::arg("scoring_exponent") = 2,
+		py::arg("do_logging") = true);
+
+	m.def("findVanishingPoints", &findVanishingPoints, R"doc(some doc)doc",
+		py::arg("lines"),
+		py::arg("w"),
+		py::arg("h"),
 		py::arg("threshold") = 4.0,
 		py::arg("conf") = 0.5,
 		py::arg("spatial_coherence_weight") = 0.0,
