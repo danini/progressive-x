@@ -349,3 +349,9 @@ MigrationBackup/
 # Specific to this report
 results/*
 build
+
+# Images, text and csv files
+*.png
+*.jpg
+*.txt
+*.csv
