@@ -183,6 +183,11 @@ namespace progx
 		{
 		}
 
+		void log(bool log_)
+		{
+			do_logging = log_;
+		}
+
 		// The function applying Progressive-X to a set of data points
 		void run(const cv::Mat &data_, // All data points
 			const _NeighborhoodGraph &neighborhood_graph_, // The neighborhood graph
@@ -249,7 +254,7 @@ namespace progx
 		_LocalOptimizerSampler &local_optimization_sampler_) // The sampler used in the local optimization of GC-RANSAC
 	{
 		if (do_logging)
-			LOG(INFO) << "Progressive-X is started...";
+			std::cout << "Progressive-X is started...\n";
 
 		// Initializing the procedure
 		initialize(data_);
@@ -262,14 +267,13 @@ namespace progx
 		std::chrono::duration<double> elapsed_seconds; // The elapsed time in seconds
 
 		if (do_logging)
-			LOG(INFO) << "The main iteration is started...";
+			std::cout << "The main iteration is started...\n";
 		for (size_t current_iteration = 0; current_iteration < 10; ++current_iteration)
 		{
-			// std::cout << 1 << std::endl;
 			if (do_logging)
 			{
-				LOG(INFO) << "-------------------------------------------";
-				LOG(INFO) << "Iteration " << current_iteration + 1 << ".";
+				std::cout << "-------------------------------------------\n";
+				std::cout << "Iteration " << current_iteration + 1 << ".\n";
 			}
 
 			// Statistics of the current iteration
@@ -285,7 +289,6 @@ namespace progx
 			main_sampler_.reset();
 			local_optimization_sampler_.reset();
 
-			// std::cout << 2 << std::endl;
 			// Applying the proposal engine to get a new putative model
 			proposal_engine->run(data_, // The data points
 				model_estimator, // The model estimator to be used
@@ -298,7 +301,6 @@ namespace progx
 				putative_model.descriptor.cols() == 0)
 				continue;
 
-			// std::cout << 3 << std::endl;
 			// Set a reference to the model estimator in the putative model instance
 			putative_model.setEstimator(&model_estimator);
 						
@@ -315,18 +317,17 @@ namespace progx
 				proposal_engine_statistics.iteration_number;
 
 			if (do_logging)
-				LOG(INFO) << "A model proposed with " <<
+				std::cout << "A model proposed with " <<
 					proposal_engine_statistics.inliers.size() << " inliers\nin " <<
 					iteration_statistics.time_of_proposal_engine << " seconds (" << 
-					proposal_engine_statistics.iteration_number << " iterations).";
+					proposal_engine_statistics.iteration_number << " iterations).\n";
 
 			/*************************************
 			*** Model instance validation step ***
 			*************************************/
 			if (do_logging)
-				LOG(INFO) << "Check if the model should be added to the compound instance.";
+				std::cout << "Check if the model should be added to the compound instance.\n";
 
-			// std::cout << 4 << std::endl;
 			// The starting time of the model validation
 			start = std::chrono::system_clock::now();
 			if (!isPutativeModelValid(data_,
@@ -334,15 +335,14 @@ namespace progx
 				proposal_engine_statistics))
 			{
 				if (do_logging)
-					LOG(INFO) << "The model is not accepted to be added to the compound instances." <<
+					std::cout << "The model is not accepted to be added to the compound instances." <<
 						" The number of consecutively rejected proposals is " << unaccepted_putative_instances <<
-						" (< " << settings.max_proposal_number_without_change << ")";
+						" (< " << settings.max_proposal_number_without_change << ")\n";
 				++unaccepted_putative_instances;
 				if (unaccepted_putative_instances == settings.max_proposal_number_without_change)
 					break;
 				continue;
 			}
-			// std::cout << 5 << std::endl;
 			
 			// The end time of the model validation
 			end = std::chrono::system_clock::now();
@@ -355,8 +355,8 @@ namespace progx
 				elapsed_seconds.count();
 
 			if (do_logging)
-				LOG(INFO) << "The model has been accepted in " <<
-					iteration_statistics.time_of_model_validation << " seconds.";
+				std::cout << "The model has been accepted in " <<
+					iteration_statistics.time_of_model_validation << " seconds.\n";
 
 			/******************************************
 			*** Compound instance optimization step ***
@@ -369,12 +369,10 @@ namespace progx
 
 			// If only a single model instance is known, use the inliers of GC-RANSAC
 			// to initialize the labeling.
-
 			if (do_logging)
-				LOG(INFO) << "Model optimization started...";
+				std::cout << "Model optimization started...\n";
 			if (models.size() == 1)
 			{
-				// std::cout << 6 << std::endl;
 				// Store the inliers of the current model to the statistics object
 				statistics.inliers_of_each_model.emplace_back(
 					proposal_engine->getRansacStatistics().inliers);
@@ -383,29 +381,25 @@ namespace progx
 				std::fill(statistics.labeling.begin(), statistics.labeling.end(), 1);
 				for (const size_t &point_idx : statistics.inliers_of_each_model.back())
 					statistics.labeling[point_idx] = 0;
-				// std::cout << 7 << std::endl;
 			}
 			// Otherwise, apply an optimizer the determine the labeling
 			else
 			{
-				// std::cout << 8 << std::endl;
 				// Apply the model optimizer
 				model_optimizer->run(data_,
 					&neighborhood_graph_,
 					&model_estimator,
 					&models);
 
-				// std::cout << 9 << std::endl;
 				size_t model_number = 0;
 				model_optimizer->getLabeling(statistics.labeling, model_number);
 
 				if (model_number != models.size())
 				{
 					if (do_logging)
-						LOG(INFO) << "Models have been removed during the optimization.\n";
+						std::cout << "Models have been removed during the optimization.\n\n";
 				}
 			}
-			// std::cout << 10 << std::endl;
 
 			// The end time of the model optimization
 			end = std::chrono::system_clock::now();
@@ -418,13 +412,12 @@ namespace progx
 				elapsed_seconds.count();
 
 			if (do_logging)
-				LOG(INFO) << "Model optimization finished in " <<
-					iteration_statistics.time_of_optimization << " seconds.";
+				std::cout << "Model optimization finished in " <<
+					iteration_statistics.time_of_optimization << " seconds.\n";
 
 			// The starting time of the model validation
 			start = std::chrono::system_clock::now();
 
-			// std::cout << 11 << std::endl;
 			// Update the compound model
 			updateCompoundModel(data_);
 
@@ -439,13 +432,12 @@ namespace progx
 				elapsed_seconds.count();
 
 			if (do_logging)
-				LOG(INFO) << "Compound instance is updated in " <<
-					iteration_statistics.time_of_compound_model_update << " seconds.";
+				std::cout << "Compound instance (containing " << models.size() << " models) is updated in " <<
+					iteration_statistics.time_of_compound_model_update << " seconds.\n";
 
 			// Store the instance number in the iteration's statistics
 			iteration_statistics.number_of_instances = models.size();
 
-			// std::cout << 12 << std::endl;
 			/************************************
 			*** Updating the iteration number ***
 			************************************/
@@ -463,13 +455,12 @@ namespace progx
 					number_of_ransac_iterations, // The total number of RANSAC iterations applied
 					point_number - model_optimizer->getOutlierNumber()); // The inlier number of the compound model instance
 
-			// std::cout << 13 << std::endl;
 			// Add the current iteration's statistics to the statistics object
 			statistics.addIterationStatistics(iteration_statistics);
 
 			if (do_logging)
-				LOG(INFO) << "The predicted number of inliers (with confidence " << settings.confidence <<
-					")\nnot covered by the compound instance is " << unseen_inliers << ".";
+				std::cout << "The predicted number of inliers (with confidence " << settings.confidence <<
+					")\nnot covered by the compound instance is " << unseen_inliers << ".\n";
 
 			// If it is likely, that there are fewer inliers in the data than the minimum number,
 			// terminate.
@@ -486,10 +477,8 @@ namespace progx
 				visualizer->setLabelNumber(models.size() + 1);
 				visualizer->visualize(0, "Labeling");
 			}
-			// std::cout << 14 << std::endl;
 		}
 
-		// std::cout << 15 << std::endl;
 		main_end = std::chrono::system_clock::now();
 
 		// The elapsed time in seconds
@@ -538,7 +527,9 @@ namespace progx
 			_ModelEstimator>>(
 				settings.inlier_outlier_threshold,
 				settings.spatial_coherence_weight,
-				settings.minimum_number_of_inliers);
+				settings.minimum_number_of_inliers,
+				100,
+				do_logging);
 		
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,

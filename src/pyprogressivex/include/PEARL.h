@@ -135,7 +135,8 @@ namespace pearl
 		PEARL(double inlier_outlier_threshold_,
 			double spatial_coherence_weight_,
 			size_t minimum_inlier_number_,
-			const size_t maximum_iteration_number_ = 100) :
+			const size_t maximum_iteration_number_ = 100,
+			const bool do_logging_ = false) :
 			maximum_iteration_number(maximum_iteration_number_),
 			inlier_outlier_threshold(inlier_outlier_threshold_),
 			spatial_coherence_weight(spatial_coherence_weight_),
@@ -143,7 +144,7 @@ namespace pearl
 			epsilon(1e-5),
 			minimum_inlier_number(minimum_inlier_number_),
 			alpha_expansion_engine(nullptr),
-			do_logging(false)
+			do_logging(do_logging_)
 		{
 		}
 
@@ -301,8 +302,8 @@ namespace pearl
 				changed_ = true;
 
 				if (do_logging)
-					LOG(INFO) << "[Optimization] Instance " << instance_idx << 
-						" is rejected due to having too few inliers (" << inlier_number  << ").";
+					std::cout << "[Optimization] Instance " << instance_idx << 
+						" is rejected due to having too few inliers (" << inlier_number  << ").\n";
 			}
 		}
 
@@ -321,7 +322,7 @@ namespace pearl
 		if (alpha_expansion_engine == nullptr)
 		{
 			if (do_logging)
-				LOG(WARNING) << "The alpha-expansion engine has not been initialized.";
+				LOG(WARNING) << "The alpha-expansion engine has not been initialized.\n";
 			return;
 		}
 
@@ -414,9 +415,8 @@ namespace pearl
 		while (!convergenve && // Break when the results converged.
 			iteration_number++ < maximum_iteration_number) // Break when the maximum iteration limit has been exceeded.
 		{
-			//std::cout << 81 << " " << iteration_number << std::endl;
 			if (do_logging)
-				LOG(INFO) << "[Optimization] Iteration " << iteration_number << ".";
+				std::cout << "[Optimization] Iteration " << iteration_number << ".\n";
 
 			// A flag to decide if the previous labeling should be used as an initial one.
 			// It is true if it is not the first iteration and the number of models has not been changed. 
@@ -424,7 +424,6 @@ namespace pearl
 				iteration_number > 1 && 
 				!model_rejected;
 
-			//std::cout << 82 << std::endl;
 			// Apply alpha-expansion to get the labeling which assigns each point to a model instance
 			labeling(data_, // All data points
 				models_,
@@ -434,7 +433,7 @@ namespace pearl
 				energy); // The energy of the alpha-expansion
 
 			if (do_logging)
-				LOG(INFO) << "[Optimization] The energy of the labeling is " << energy << ".";
+				std::cout << "[Optimization] The energy of the labeling is " << energy << ".\n";
 
 			// A flag to see if the model parameters changed.
 			// Initialize as if nothing has changed.
@@ -444,14 +443,12 @@ namespace pearl
 			// Initialize as if nothing has changed.
 			model_rejected = false;
 			
-			//std::cout << 83 << std::endl;
 			// Re-estimate the model parameters based on the determined labeling
 			parameterEstimation(data_, // All data points
 				models_, // The currently stored models, i.e., the compound model
 				model_estimator_, // The model estimator used for estimating the model parameters from a set of data points
 				model_parameters_changed); // A flag to see if anything has changed
 
-			//std::cout << 84 << std::endl;
 			rejectInstances(data_, // All data points
 				models_, // The currently stored models, i.e., the compound model
 				model_rejected); // A flag to see if anything has changed
@@ -464,7 +461,6 @@ namespace pearl
 				convergenve = true;
 
 			previous_energy = energy;
-			//std::cout << 85 << std::endl;
 		}
 		return true;
 	}
