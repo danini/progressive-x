@@ -182,40 +182,24 @@ namespace gcransac
 
 					model.descriptor.resize(3, 1);
 					model.descriptor << v[0], v[1], v[2];
-
-					/*std::cout << model.descriptor << std::endl;
-					std::cout << l0[0] << " " << l0[1] << " " << l0[2] << std::endl;
-					std::cout << l1[0] << " " << l1[1] << " " << l1[2] << std::endl << std::endl;*/
-
-					/*
-
-					const double
-						&a0 = data_ptr[offset1],
-						&b0 = data_ptr[offset1 + 1],
-						&c0 = data_ptr[offset1 + 2],
-						&a1 = data_ptr[offset2],
-						&b1 = data_ptr[offset2 + 1],
-						&c1 = data_ptr[offset2 + 2];
-
-					const double y = 
-						(c0 * a1 / a0 - c1) / (b1 - b0 * a1 / a0);
-					const double x = (-b1 * y - c1) / a1;
-					
-					model.descriptor.resize(2, 1);
-					model.descriptor << x, y;*/
 				} else
 				{
-					//return false;
-
 					Eigen::MatrixXd A(sample_number_, 3);
 
 					for (size_t sampleIdx = 0; sampleIdx < sample_number_; ++sampleIdx)
 					{
 						if (sample_ == nullptr)
-							offset = cols * sampleIdx;
-						else
-							offset = cols * sample_[sampleIdx];
-						
+						{
+							offset = cols * sampleIdx;							
+							if (weights_ != nullptr)
+								weight = weights_[sampleIdx];
+						} else
+						{
+							offset = cols * sample_[sampleIdx];							
+							if (weights_ != nullptr)
+								weight = weights_[sample_[sampleIdx]];
+						}
+
 						const double
 							&x0 = data_ptr[offset],
 							&y0 = data_ptr[offset + 1],
@@ -227,36 +211,8 @@ namespace gcransac
 							my = (y0 + y1) / 2.0,
 							mz = 1.0;
 
-						/*A.row(3 * sampleIdx) << 0, -mz, my;
-						A.row(3 * sampleIdx + 1) << mz, 0, -mx;
-						A.row(3 * sampleIdx + 2) << -my, mx, 0;
-
-						inhom(3 * sampleIdx) = x0;
-						inhom(3 * sampleIdx + 1) = y0;
-						inhom(3 * sampleIdx + 2) = 1;*/
-
 						A.row(sampleIdx) << y0 * mz - my, mx - x0 * mz, x0 * my - y0 * mx;
-
-						/*
-						double l0[3];
-						vec_cross(x0, y0, 1,
-							x1, y1, 1,
-							l0[0], l0[1], l0[2]);
-
-						double vx = x1 - x0,
-							vy = y1 - y0;
-						double length = sqrt(vx * vx + vy * vy);
-						vx /= length;
-						vy /= length;
-
-						double a = -vy,
-							b = vx;
-						double c = -a * x0 - b * y0;
-
-						const double
-							&a = data_ptr[offset],
-							&b = data_ptr[offset + 1],
-							&c = data_ptr[offset + 2];*/
+						A.row(sampleIdx) *= weight;
 					}
 
 					// Estimating the vanishing point from the overdetermined linear system
@@ -264,11 +220,6 @@ namespace gcransac
 						A.transpose() * A);
 					const Eigen::MatrixXd &Q = qr.matrixQ();
 					model.descriptor = Q.rightCols<1>();
-
-					/*
-					Eigen::Vector3d x = A.colPivHouseholderQr().solve(inhom);
-					model.descriptor.resize(3, 1);
-					model.descriptor << x; x(0), x(1), 1;*/
 					model.descriptor.normalize();
 				}
 

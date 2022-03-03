@@ -33,6 +33,7 @@ namespace progx
 	{
 		// The settings of the proposal engine
 		gcransac::utils::Settings proposal_engine_settings;
+		std::vector<double> point_weights;
 
 		size_t minimum_number_of_inliers,
 			max_proposal_number_without_change,
@@ -528,9 +529,10 @@ namespace progx
 				settings.inlier_outlier_threshold,
 				settings.spatial_coherence_weight,
 				settings.minimum_number_of_inliers,
+				settings.point_weights,
 				100,
 				do_logging);
-		
+
 		// Initializing the proposal engine, i.e., Graph-Cut RANSAC
 		proposal_engine = std::make_unique < gcransac::GCRANSAC <_ModelEstimator,
 			_NeighborhoodGraph,
