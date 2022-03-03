@@ -216,10 +216,19 @@ namespace gcransac
 					}
 
 					// Estimating the vanishing point from the overdetermined linear system
-					const Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(
+					/*const Eigen::ColPivHouseholderQR<Eigen::MatrixXd> qr(
 						A.transpose() * A);
 					const Eigen::MatrixXd &Q = qr.matrixQ();
-					model.descriptor = Q.rightCols<1>();
+					model.descriptor = Q.rightCols<1>();*/
+
+					Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> eigensolver(A.transpose() * A);
+					const Eigen::ArrayXcd &singularVals = eigensolver.eigenvalues();
+
+					Eigen::MatrixXd::Index minRow;
+					const double &min =
+						singularVals.real().minCoeff(&minRow); // smallest one of the three eigenvalues
+
+					model.descriptor = eigensolver.eigenvectors().col(minRow);
 					model.descriptor.normalize();
 				}
 
