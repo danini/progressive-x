@@ -160,8 +160,72 @@ py::tuple findHomographies(
 	return py::make_tuple(homographies_, labeling_);
 }
 
+py::tuple findPlanes(
+	py::array_t<double>  points,
+	double threshold,
+	double conf,
+	double spatial_coherence_weight,
+	double neighborhood_ball_radius,
+	double maximum_tanimoto_similarity,
+	int max_iters,
+	int minimum_point_number,
+	int maximum_model_number,
+	int sampler_id,
+	double scoring_exponent,
+	bool do_logging) {
+		
+	py::buffer_info buf1 = points.request();
+	size_t NUM_TENTS = buf1.shape[0];
+	size_t DIM = buf1.shape[1];
+
+	if (DIM != 3) {
+		throw std::invalid_argument("points should be an array with dims [n,3], n>=3");
+	}
+	if (NUM_TENTS < 3) {
+		throw std::invalid_argument("points should be an array with dims [n,3], n>=3");
+	}
+
+	double *ptr1 = (double *)buf1.ptr;
+	std::vector<double> points_;
+	points_.assign(ptr1, ptr1 + buf1.size);
+
+	std::vector<double> planes;
+	
+	std::vector<size_t> labeling(NUM_TENTS);
+
+	int num_models = findPlanes_(
+		points_,
+		labeling,
+		planes,
+		spatial_coherence_weight,
+		threshold,
+		conf,
+		neighborhood_ball_radius,
+		maximum_tanimoto_similarity,
+		max_iters,
+		minimum_point_number,
+		maximum_model_number,
+		sampler_id,
+		scoring_exponent,
+		do_logging);
+		
+	py::array_t<int> labeling_ = py::array_t<int>(NUM_TENTS);
+	py::buffer_info buf3 = labeling_.request();
+	int *ptr3 = (int *)buf3.ptr;
+	for (size_t i = 0; i < NUM_TENTS; i++)
+		ptr3[i] = static_cast<int>(labeling[i]);
+	
+	py::array_t<double> planes_ = py::array_t<double>({ static_cast<size_t>(num_models), 3 });
+	py::buffer_info buf2 = planes_.request();
+	double *ptr2 = (double *)buf2.ptr;
+	for (size_t i = 0; i < 3 * num_models; i++)
+		ptr2[i] = planes[i];
+	return py::make_tuple(planes_, labeling_);
+}
+
 py::tuple findVanishingPoints(
 	py::array_t<double>  lines_,
+	py::array_t<double>  weights_,
 	size_t w, size_t h,
 	double threshold,
 	double conf,
@@ -190,11 +254,23 @@ py::tuple findVanishingPoints(
 	std::vector<double> corrs;
 	corrs.assign(ptr1, ptr1 + buf1.size);
 
+	// Parsing the weights
+	py::buffer_info bufW = weights_.request();
+	DIM = bufW.ndim;
+
+	std::vector<double> weights;
+	if (DIM > 0)
+	{
+		double *ptrW = (double *)bufW.ptr;
+		weights.assign(ptrW, ptrW + bufW.size);
+	}
+
 	std::vector<double> vanishingPoints;	
 	std::vector<size_t> labeling(NUM_TENTS);
 
 	int num_models = findVanishingPoints_(
 		corrs,
+		weights,
 		labeling,
 		vanishingPoints,
 		w, h,
@@ -302,6 +378,8 @@ PYBIND11_PLUGIN(pyprogressivex) {
            find6DPoses,
            findHomographies,
            findTwoViewMotions,
+		   findPlanes,
+		   findVanishingPoints,
     )doc");
 
 	m.def("findHomographies", &findHomographies, R"doc(some doc)doc",
@@ -320,10 +398,25 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 2,
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
+
+	m.def("findPlanes", &findPlanes, R"doc(some doc)doc",
+		py::arg("points"),
+		py::arg("threshold") = 4.0,
+		py::arg("conf") = 0.5,
+		py::arg("spatial_coherence_weight") = 0.0,
+		py::arg("neighborhood_ball_radius") = 200.0,
+		py::arg("maximum_tanimoto_similarity") = 0.4,
+		py::arg("max_iters") = 1000,
+		py::arg("minimum_point_number") = 10,
+		py::arg("maximum_model_number") = -1,
+		py::arg("sampler_id") = 3,
+		py::arg("scoring_exponent") = 2,
+		py::arg("do_logging") = false);
 
 	m.def("findVanishingPoints", &findVanishingPoints, R"doc(some doc)doc",
 		py::arg("lines"),
+		py::arg("weights"),
 		py::arg("w"),
 		py::arg("h"),
 		py::arg("threshold") = 4.0,
@@ -336,7 +429,7 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 2,
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
 
 	m.def("findTwoViewMotions", &findTwoViewMotions, R"doc(some doc)doc",
 		py::arg("corrs"),
@@ -354,7 +447,7 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 3,		
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
 		
 	m.def("find6DPoses", &find6DPoses, R"doc(some doc)doc",
 		py::arg("x1y1"),

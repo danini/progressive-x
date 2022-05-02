@@ -135,6 +135,7 @@ namespace pearl
 		PEARL(double inlier_outlier_threshold_,
 			double spatial_coherence_weight_,
 			size_t minimum_inlier_number_,
+			std::vector<double> point_weights_,
 			const size_t maximum_iteration_number_ = 100,
 			const bool do_logging_ = false) :
 			maximum_iteration_number(maximum_iteration_number_),
@@ -144,7 +145,8 @@ namespace pearl
 			epsilon(1e-5),
 			minimum_inlier_number(minimum_inlier_number_),
 			alpha_expansion_engine(nullptr),
-			do_logging(do_logging_)
+			do_logging(do_logging_),
+			point_weights(point_weights_)
 		{
 		}
 
@@ -168,6 +170,8 @@ namespace pearl
 	protected:
 		// The alpha-expansion engine used to obtain a labeling
 		GCoptimizationGeneralGraph *alpha_expansion_engine;
+		// The weights used for the non-minimal fitting
+		std::vector<double> point_weights;
 
 		// The weight of the spatial coherence term
 		double spatial_coherence_weight,
@@ -371,7 +375,9 @@ namespace pearl
 			model_estimator_->estimateModelNonminimal(data_, // All data points
 				&current_inliers[0], // The indices of the inliers
 				inlier_number, // The number of inliers
-				&current_models); // The estimated model parameters
+				&current_models, // The estimated model parameters
+				point_weights.size() == 0 ? 
+					nullptr : &point_weights[0]); // The weights used for the non-minimal fitting
 
 			// If there are fewer or more models estimated than a single one,
 			// continue to the next instance.
