@@ -24,7 +24,9 @@
 #include "estimators/homography_estimator.h"
 #include "estimators/essential_estimator.h"
 #include "vanishing_point_estimator.h"
+#include "common_vanishing_point_estimator.h"
 #include "solver_vanishing_point_two_lines.h"
+#include "solver_two_vanishing_point_four_lines.h"
 
 #include "progressive_x.h"
 
@@ -527,6 +529,128 @@ int findVanishingPoints_(
 		vanishing_points.emplace_back(model.descriptor(0));
 		vanishing_points.emplace_back(model.descriptor(1));
 		vanishing_points.emplace_back(model.descriptor(2));
+	}
+	
+	return progressive_x.getModelNumber();
+}
+
+int findCommonVanishingPoints_(
+	std::vector<double>& lines,
+	std::vector<double>& weights,
+	std::vector<size_t>& labeling,
+	std::vector<double>& vanishing_points,
+	const size_t &image_width,
+	const size_t &image_height,
+	const double &spatial_coherence_weight,
+	const double &threshold,
+	const double &confidence,
+	const double &neighborhood_ball_radius,
+	const double &maximum_tanimoto_similarity,
+	const size_t &max_iters,
+	const size_t &minimum_point_number,
+	const int &maximum_model_number,
+	const size_t &sampler_id,
+	const double &scoring_exponent,
+	const bool do_logging)
+{
+	// Initialize Google's logging library.
+	static bool isLoggingInitialized = false;
+	if (!isLoggingInitialized)
+	{
+		google::InitGoogleLogging("pyprogessivex");
+		isLoggingInitialized = true;
+	}
+	
+	const size_t num_lines = lines.size() / 8;
+		
+	cv::Mat points(num_lines, 8, CV_64F, &lines[0]);
+	
+	// Initialize the neighborhood used in Graph-cut RANSAC and, perhaps,
+	// in the sampler if NAPSAC or Progressive-NAPSAC sampling is applied.
+	gcransac::neighborhood::FlannNeighborhoodGraph neighborhood(&points, // All data points
+		neighborhood_ball_radius); // The radius of the neighborhood ball for determining the neighborhoods.
+
+	// The default estimator for homography fitting
+	typedef gcransac::estimator::CommonVanishingPointEstimator<
+		gcransac::estimator::solver::TwoVanishingPointFourLineSolver, // The solver used for fitting a model to a minimal sample
+		gcransac::estimator::solver::TwoVanishingPointFourLineSolver> // The solver used for fitting a model to a non-minimal sample
+		DefaultVanishingPointEstimator;
+
+	// Initialize the samplers
+	// The main sampler is used for sampling in the main RANSAC loop
+	constexpr size_t kSampleSize = DefaultVanishingPointEstimator::sampleSize();
+	typedef gcransac::sampler::Sampler<cv::Mat, size_t> AbstractSampler;
+	std::unique_ptr<AbstractSampler> main_sampler;
+	if (sampler_id == 0) // Initializing a RANSAC-like uniformly random sampler
+		main_sampler = std::unique_ptr<AbstractSampler>(new gcransac::sampler::UniformSampler(&points));
+	else if (sampler_id == 1)  // Initializing a PROSAC sampler. This requires the points to be ordered according to the quality.
+	{
+		if (do_logging)
+			printf("Note: PROSAC sampler requires the correspondences to be order by quality, e.g., SNN ratio.\n");
+		main_sampler = std::unique_ptr<AbstractSampler>(new gcransac::sampler::ProsacSampler(&points, kSampleSize));
+	}
+	else
+	{
+		fprintf(stderr, "Unknown sampler identifier: %d. The accepted samplers are 0 (uniform sampling), 1 (PROSAC sampling), 2 (P-NAPSAC sampling)\n",
+			sampler_id);
+		return 0;
+	}
+
+	// The local optimization sampler is used inside the local optimization
+	gcransac::sampler::UniformSampler local_optimization_sampler(&points);
+
+	// Applying Progressive-X
+	progx::ProgressiveX<gcransac::neighborhood::FlannNeighborhoodGraph, // The type of the used neighborhood-graph
+		DefaultVanishingPointEstimator, // The type of the used model estimator
+		AbstractSampler, // The type of the used main sampler in GC-RANSAC
+		gcransac::sampler::UniformSampler> // The type of the used sampler in the local optimization of GC-RANSAC
+		progressive_x(nullptr);
+
+	// Set the parameters of Progressive-X
+	progx::MultiModelSettings &settings = progressive_x.getMutableSettings();
+	// Weights of the lines used in LSQ fitting
+	settings.point_weights = weights;
+	// The minimum number of inlier required to keep a model instance.
+	// This value is used to determine the label cost weight in the alpha-expansion of PEARL.
+	settings.minimum_number_of_inliers = minimum_point_number;
+	// The inlier-outlier threshold
+	settings.inlier_outlier_threshold = threshold;
+	// The required confidence in the results
+	settings.setConfidence(confidence);
+	// The maximum Tanimoto similarity of the proposal and compound instances
+	settings.maximum_tanimoto_similarity = maximum_tanimoto_similarity;
+	// The weight of the spatial coherence term
+	settings.spatial_coherence_weight = spatial_coherence_weight;
+	// Setting the maximum iteration number
+	settings.proposal_engine_settings.max_iteration_number = max_iters;
+	// Setting the maximum model number if needed
+	if (maximum_model_number > 0)
+		settings.maximum_model_number = maximum_model_number;
+	// Setting the scoring exponent
+	progressive_x.setScoringExponent(scoring_exponent);
+	// Set the logging parameter
+	progressive_x.log(do_logging);
+
+	progressive_x.run(points, // All data points
+		neighborhood, // The neighborhood graph
+		*main_sampler.get(), // The main sampler used in GC-RANSAC
+		local_optimization_sampler); // The sampler used in the local optimization of GC-RANSAC
+	
+	// The obtained labeling
+	labeling = progressive_x.getStatistics().labeling;
+
+	vanishing_points.reserve(6 * progressive_x.getModelNumber());
+	
+	// Saving the homography parameters
+	for (size_t model_idx = 0; model_idx < progressive_x.getModelNumber(); ++model_idx)
+	{
+		const auto &model = progressive_x.getModels()[model_idx];
+		vanishing_points.emplace_back(model.descriptor(0));
+		vanishing_points.emplace_back(model.descriptor(1));
+		vanishing_points.emplace_back(model.descriptor(2));
+		vanishing_points.emplace_back(model.descriptor(3));
+		vanishing_points.emplace_back(model.descriptor(4));
+		vanishing_points.emplace_back(model.descriptor(5));
 	}
 	
 	return progressive_x.getModelNumber();
