@@ -215,10 +215,10 @@ py::tuple findPlanes(
 	for (size_t i = 0; i < NUM_TENTS; i++)
 		ptr3[i] = static_cast<int>(labeling[i]);
 	
-	py::array_t<double> planes_ = py::array_t<double>({ static_cast<size_t>(num_models), 3 });
+	py::array_t<double> planes_ = py::array_t<double>({ static_cast<size_t>(num_models), 4 });
 	py::buffer_info buf2 = planes_.request();
 	double *ptr2 = (double *)buf2.ptr;
-	for (size_t i = 0; i < 3 * num_models; i++)
+	for (size_t i = 0; i < 4 * num_models; i++)
 		ptr2[i] = planes[i];
 	return py::make_tuple(planes_, labeling_);
 }
