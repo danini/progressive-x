@@ -162,6 +162,7 @@ py::tuple findHomographies(
 
 py::tuple findVanishingPoints(
 	py::array_t<double>  lines_,
+	py::array_t<double>  weights_,
 	size_t w, size_t h,
 	double threshold,
 	double conf,
@@ -190,11 +191,23 @@ py::tuple findVanishingPoints(
 	std::vector<double> corrs;
 	corrs.assign(ptr1, ptr1 + buf1.size);
 
+	// Parsing the weights
+	py::buffer_info bufW = weights_.request();
+	DIM = bufW.ndim;
+
+	std::vector<double> weights;
+	if (DIM > 0)
+	{
+		double *ptrW = (double *)bufW.ptr;
+		weights.assign(ptrW, ptrW + bufW.size);
+	}
+
 	std::vector<double> vanishingPoints;	
 	std::vector<size_t> labeling(NUM_TENTS);
 
 	int num_models = findVanishingPoints_(
 		corrs,
+		weights,
 		labeling,
 		vanishingPoints,
 		w, h,
@@ -377,6 +390,8 @@ PYBIND11_PLUGIN(pyprogressivex) {
            find6DPoses,
            findHomographies,
            findTwoViewMotions,
+		   findPlanes,
+		   findVanishingPoints,
     )doc");
 
 	m.def("findHomographies", &findHomographies, R"doc(some doc)doc",
@@ -395,10 +410,11 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 2,
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
 
 	m.def("findVanishingPoints", &findVanishingPoints, R"doc(some doc)doc",
 		py::arg("lines"),
+		py::arg("weights"),
 		py::arg("w"),
 		py::arg("h"),
 		py::arg("threshold") = 4.0,
@@ -411,7 +427,7 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 2,
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
 
 	m.def("findTwoViewMotions", &findTwoViewMotions, R"doc(some doc)doc",
 		py::arg("corrs"),
@@ -429,7 +445,7 @@ PYBIND11_PLUGIN(pyprogressivex) {
 		py::arg("maximum_model_number") = -1,
 		py::arg("sampler_id") = 3,
 		py::arg("scoring_exponent") = 3,		
-		py::arg("do_logging") = true);
+		py::arg("do_logging") = false);
 		
 	m.def("find6DPoses", &find6DPoses, R"doc(some doc)doc",
 		py::arg("x1y1"),
