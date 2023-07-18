@@ -58,6 +58,7 @@ int findTwoViewMotions_(
 
 int findVanishingPoints_(
 	std::vector<double>& lines,
+	std::vector<double>& weights,
 	std::vector<size_t>& labeling,
 	std::vector<double>& vanishing_points,
 	const size_t &image_width,
