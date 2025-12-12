@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.5)
 
 project(ProgressiveX LANGUAGES CXX)
 
@@ -64,32 +64,6 @@ endif()
 # ==============================================================================
 # Find GLOG
 # ==============================================================================
-#include(FindPackageHandleStandardArgs)
-#
-#set(GLOG_ROOT_DIR "" CACHE PATH "Folder contains Google glog")
-# 
-#find_path(GLOG_INCLUDE_DIR glog/logging.h
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        src)
-# 
-#find_library(GLOG_LIBRARY glog libglog
-#    PATHS
-#        ${GLOG_ROOT_DIR}
-#    PATH_SUFFIXES
-#        .libs
-#        lib
-#        lib64)
-# 
-#find_package_handle_standard_args(GLOG DEFAULT_MSG
-#    GLOG_INCLUDE_DIR GLOG_LIBRARY)
-# 
-#if(GLOG_FOUND)
-#    set(GLOG_INCLUDE_DIRS ${GLOG_INCLUDE_DIR})
-#    set(GLOG_LIBRARIES ${GLOG_LIBRARY})
-#endif()
-#
 find_package(glog REQUIRED)
 if(NOT glog_FOUND)
 	message(FATAL_ERROR "Glog not found.")
@@ -160,15 +134,23 @@ file(GLOB_RECURSE SRCS_PROGRESSIVEX
 # Structure: Python binding
 # ==============================================================================
 # Generate python module
-add_subdirectory(lib/pybind11)
+find_package(pybind11 CONFIG REQUIRED)
 
-pybind11_add_module(pyprogressivex ${SOURCE_DIR}/src/bindings.cpp ${SOURCE_DIR}/src/progressivex_python.cpp  ${HDRS_PROGRESSIVEX} ${SRCS_PROGRESSIVEX} )
-target_link_libraries(pyprogressivex PRIVATE  
-	${OpenCV_LIBS} 
-	Eigen3::Eigen 
-	glog::glog 
-	gflags
-	GraphCutRANSAC)
+pybind11_add_module(pyprogressivex
+  ${SOURCE_DIR}/src/bindings.cpp
+  ${SOURCE_DIR}/src/progressivex_python.cpp
+  ${HDRS_PROGRESSIVEX}
+  ${SRCS_PROGRESSIVEX}
+)
+
+target_link_libraries(pyprogressivex PRIVATE
+    pybind11::module
+    ${OpenCV_LIBS}
+    Eigen3::Eigen
+    glog::glog
+    gflags
+    GraphCutRANSAC
+)
 
 add_library(${PROJECT_NAME} STATIC
 	${HDRS_PROGRESSIVEX}

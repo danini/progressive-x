@@ -16,13 +16,15 @@ $ make
 # Install Python package and compile C++
 
 ```bash
-python3 ./setup.py install
-```
+# 1) Create and activate the environment
+conda env create -f environment.yml
+conda activate progressivex
 
-or
+# 2) Build and install the Python binding (editable)
+# Ensure CMake can resolve conda-forge packages deterministically
+export CMAKE_PREFIX_PATH="$CONDA_PREFIX"
 
-```bash
-pip3 install -e .
+pip install -e .
 ```
 
 # Example project
